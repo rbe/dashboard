@@ -1,0 +1,22 @@
+h1 {
+    border-style: solid;
+    border-width: 1px;
+    padding: 15px 15px 15px 15px; /*t r b l*/
+    font-family: "Myriad Pro";
+    color: #a41e23;
+}
+h2 {
+    border-style: dashed;
+    border-width: 1px;
+    padding: 10px 15px 10px 15px; /*t r b l*/
+    font-family: "Myriad Pro";
+    color: #808484;
+}
+body {
+    font-family: Arial;
+    color: #000;
+}
+a {
+    font-family: Arial;
+    color: #000;
+}

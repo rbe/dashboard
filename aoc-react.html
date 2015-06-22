@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <link rel="stylesheet" href="aoc.css"/>
+        <script src="js/react-0.12.0/build/react.js"></script>
+        <script src="js/react-0.12.0/build/JSXTransformer.js"></script>
+        <script type="text/jsx">
+var Hello = React.createClass({
+    render: function() {
+        var items = {};
+        var idx = 0;
+        this.props.items.forEach(function(item) {
+            items['item-' + idx++] = <li><a href={item.href} target="_blank">{item.text ? item.text : item.href}</a></li>;
+        });
+        return (
+            <div id={this.props.name}>
+                <h1 className="aoc-collapsible-header">{this.props.name}</h1>
+                <div className="aoc-collapsible-content">
+                    <ul>
+                        {items}
+                    </ul>
+                </div>
+            </div>
+        );
+    }
+});
+        </script>
+        <title>art of coding</title>
+    </head>
+    <body>
+            https://f-lga1.f.de.net.dtag.de/
+        </div>
+        <div id="email-kalender">
+            <h1 class="aoc-collapsible-header">E-Mail &amp; Kalender</h1>
+            <div class="aoc-collapsible-content">
+                <ul>
+                    <li>
+                        <a href="https://mx.1ci.net/iredadmin">mx.1ci.net/iredadmin</a>
+                    </li>
+                    <li>
+                        <a href="https://mx.1ci.net/davical/admin.php">mx.1ci.net DAViCal Admin</a>
+                    </li>
+                    <li>
+                        <a href="https://mail.1ci.net/roundcube">domainFACTORY Webmail</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        <div id="kunden">
+            <h1 class="aoc-collapsible-header">FACT IT</h1>
+            <div class="aoc-collapsible-content">
+                <ul>
+                    <li>
+                        <a href="https://ssl.sjs-bremen.de/rz-fact">RZ BRemen</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        <div id="developer">
+            <h1 class="aoc-collapsible-header">Developer</h1>
+            <div class="aoc-collapsible-content">
+                <h2 class="aoc-collapsible-header">eBooks</h2>
+                <div class="aoc-collapsible-content">
+                    <ul>
+                        <li>
+                            <a href="http://www.manning.com">Manning</a>
+                        </li>
+                        <li>
+                            <a href="http://www.pragprog.com">Pragmatic Programmer</a>
+                        </li>
+                        <li>
+                            <a href="http://www.packtpub.com">PACKT Publishing</a>
+                        </li>
+                        <li>
+                            <a href="http://www.sitepoint.com">SitePoint</a>
+                        </li>
+                        <li>
+                            <a href="http://www.amazon.de">Amazon</a>
+                        </li>
+                        <li>
+                            <a href="">http://my.safaribooksonline.com/</a>
+                        </li>
+                    </ul>
+                </div>
+                <h2 class="aoc-collapsible-header">HTML, ...</h2>
+                <div class="aoc-collapsible-content">
+                    <ul>
+                        <li>
+                            <a href="http://caniuse.com/">Can I use?</a>
+                        </li>
+                    </ul>
+                </div>
+                <h2 class="aoc-collapsible-header">Java</h2>
+                <div class="aoc-collapsible-content">
+                    <ul>
+                        <li>
+                            <a href="http://www.parleys.com/">Parleys eLearning Plattform</a>
+                        </li>
+                    </ul>
+                </div>
+                <h2 class="aoc-collapsible-header">Apple</h2>
+                <div class="aoc-collapsible-content">
+                    <ul>
+                        <li>
+                            <a href="http://developer.apple.com/">Apple Developer Portal</a>
+                        </li>
+                        <li>
+                            <a href="http://developer.apple.com/devcenter/ios/index.action">Apple iOS Developer Portal</a>
+                        </li>
+                        <li>
+                            <a href="http://developer.apple.com/devcenter/mac/index.action">Apple Mac OS X Developer Portal</a>
+                        </li>
+                    </ul>
+                </div>
+                <h2 class="aoc-collapsible-header">Spring</h2>
+                <div class="aoc-collapsible-content">
+                    <ul>
+                        <li>
+                            <a href="http://www.springsource.com/">SpringSource</a>
+                        </li>
+                    </ul>
+                </div>
+                <h2 class="aoc-collapsible-header">Groovy</h2>
+                <div class="aoc-collapsible-content">
+                    <ul>
+                        <li>
+                            <a href="http://www.groovymag.com/main/">GroovyMag</a>
+                        </li>
+                    </ul>
+                </div>
+                <h2 class="aoc-collapsible-header">Standards</h2>
+                <div class="aoc-collapsible-content">
+                    <ul>
+                        <li>
+                            <a href="http://www.iana.org/assignments/media-types">IANA Media Types</a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div id="domains-server">
+            <h1 class="aoc-collapsible-header">Internet-Domains &amp; Server</h1>
+            <div class="aoc-collapsible-content">
+                <h2 class="aoc-collapsible-header">Monitoring</h2>
+                <div class="aoc-collapsible-content">
+                    <ul>
+                        <li>
+                            <a href="http://www.livewatch.de/">LiveWatch</a>
+                        </li>
+                    </ul>
+                </div>
+                <h2 class="aoc-collapsible-header">Server</h2>
+                <div class="aoc-collapsible-content">
+                    <ul>
+                        <li>
+                            <a href="https://robot.your-server.de/">Hetzner Robot</a>
+                        </li>
+                        <li>
+                            <a href="https://admin.jiffybox.de/">jiffybox</a>
+                        </li>
+                        <li>
+                            <a href="https://zkm.fastit.net/">myLoc</a>
+                        </li>
+                        <li>
+                            <a href="https://console.aws.amazon.com/console/home">Amazon Web Services Console</a>
+                        </li>
+                    </ul>
+                </div>
+                <h2 class="aoc-collapsible-header">Email-Server</h2>
+                <div class="aoc-collapsible-content">
+                    <ul>
+                        <li>
+                            <a href="http://www.mxtoolbox.com/blacklists.aspx">mxtoolbox.com Blacklists</a>
+                        </li>
+                        <li>
+                            <a href="http://postmaster.aol.com/">AOL Postmaster</a><br/>
+                        </li>
+                        <li>
+                            <a href="http://postmaster.aol.com/Reputation.php">Reputation Check Tool</a>
+                        </li>
+                    </ul>
+                </div>
+                <h2 class="aoc-collapsible-header">DNS</h2>
+                <div class="aoc-collapsible-content">
+                    <ul>
+                        <li>
+                            <a href="https://dns.netgrow.it/">InterNetX dns.netgrow.it</a>
+                        </li>
+                        <li>
+                            <a href="https://login.autodns.com/">InterNetX AutoDNS</a>
+                        </li>
+                    </ul>
+                </div>
+                <h2 class="aoc-collapsible-header">TCP/IP</h2>
+                <div class="aoc-collapsible-content">
+                    <ul>
+                        <li>
+                            <a href="https://f-lga1.f.de.net.dtag.de/">Deutsche Telekom - Route Information Service</a>
+                        </li>
+                        <li>
+                            <a href="http://www.belwue.de/lg/lg.cgi">BelWue Traceroute</a>
+                        </li>
+                        <li>
+                            <a href="http://centralops.net/co/Traceroute.aspx">centralops.net Traceroute</a>
+                            <a href="http://centralops.net/co/Traceroute.aspx?addr=mail.1ci.net&ip-version=4">centralops.net IPv4 Traceroute mail.1ci.net</a>
+                            <a href="http://centralops.net/co/Traceroute.aspx?addr=mail.1ci.net&ip-version=6">centralops.net IPv6 Traceroute mail.1ci.net</a>
+                        </li>
+                        <li>
+                            <a href="http://4or6.com/traceroute?l=de">4or6.com Traceroute</a>
+                        </li>
+                        <li>
+                            <a href="http://www.bgp4.net/wiki/doku.php?id=tools:ipv4_traceroute">bgp4.net Wiki, IPv4 Traceroute</a>
+                        </li>
+                        <li>
+                            <a href="http://www.bgp4.net/wiki/doku.php?id=tools:ipv6_traceroute">bgp4.net Wiki, IPv6 Traceroute</a>
+                        </li>
+                    </ul>
+                </div>
+                <h2 class="aoc-collapsible-header">SSL-Zertifikate</h2>
+                <div class="aoc-collapsible-content">
+                    <ul>
+                        <li>
+                            <a href="https://secure.dsek.de/login.php">DSEK</a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div id="kommunikation">
+            <h1 class="aoc-collapsible-header">Kommunikation</h1>
+            <div class="aoc-collapsible-content">
+                <ul>
+                    <li>
+                        <a href="https://manager.skype.com/">Skype Manager</a>
+                    </li>
+                    <li>
+                        <a href="https://portal.nfon.net">nfon Portal</a>
+                    </li>
+                    <li>
+                        <a href="https://secure.live.sipgate.de/signin/team">sipgate Team</a>
+                    </li>
+                    <li>
+                        <a href="https://www.mobilesuite.de/">mobilesuite</a>
+                    </li>
+                    <li>
+                        <a href="https://service.maxxim.de/">maXXim Service</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        <div id="kontakte">
+            <h1 class="aoc-collapsible-header">Kontakte</h1>
+            <div class="aoc-collapsible-content">
+                <ul>
+                    <li>
+                        <a href="http://www.xing.de/">XING</a>
+                    </li>
+                    <li>
+                        <a href="http://www.unternehmenswelt.de/">Unternehmenswelt</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        <div id="reise">
+            <h1 class="aoc-collapsible-header">Reise</h1>
+            <div class="aoc-collapsible-content">
+                <h2 class="aoc-collapsible-header">Bahn</h2>
+                <div class="aoc-collapsible-content">
+                    <ul>
+                        <li>
+                            <a href="http://www.obt.de/obt/view/index.shtml">Deutsche Bahn - Online Business Travel</a>
+                        </li>
+                    </ul>
+                </div>
+                <h2 class="aoc-collapsible-header">Auto</h2>
+                <div class="aoc-collapsible-content">
+                    <ul>
+                        <li>
+                            <a href="">https://businessplus.europcar.de/home.ec</a>
+                        </li>
+                        <li>
+                            <a href=""></a><a href=""></a><a href="">http://www.sixt.de/mietwagen-reservierung/firmenkunden/</a>
+                        </li>
+                    </ul>
+                </div>
+                <h2 class="aoc-collapsible-header">Hotel</h2>
+                <div class="aoc-collapsible-content">
+                    <ul>
+                        <li>
+                            <a href=""></a><a href=""></a><a href="https://de.solmelia.com/nMas/jsp/C_Home.jsp">Sol Melia</a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div id="einkauf">
+            <h1 class="aoc-collapsible-header">Einkauf</h1>
+            <div class="aoc-collapsible-content">
+                <h2 class="aoc-collapsible-header">B&uuml;robedarf</h2>
+                <div class="aoc-collapsible-content">
+                    <ul>
+                        <li>
+                            <a href="http://www.bueromarkt-ag.de/">B&uuml;romarkt B&ouml;ttcher</a>
+                        </li>
+                        <li>
+                            <a href="">https://www.office-discount.de</a>
+                        </li>
+                        <li>
+                            <a href="">http://www.mercateo.com</a>
+                        </li>
+                        <li>
+                            <a href="">http://megadruck.de/</a>
+                        </li>
+                        <li>
+                            <a href="">http://www.schneider.de/</a>
+                        </li>
+                    </ul>
+                </div>
+                <h2 class="aoc-collapsible-header">Werbung</h2>
+                <div class="aoc-collapsible-content">
+                    <ul>
+                        <li>
+                            <a href="http://www.giffits.de/">Giffits</a>
+                        </li>
+                        <li>
+                            <a href="http://www.werbezeichen.de/">Werbezeichen</a>
+                        </li>
+                        <li>
+                            <a href="http://www.schneider.de/shop/kategorie/werbeartikel/">Schneider</a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div id="sonstiges">
+            <h1 class="aoc-collapsible-header">Sonstiges</h1>
+            <div class="aoc-collapsible-content">
+                <ul>
+                    <li>
+                        <a href="">https://www.handelsregister.de/rp_web/mask.do?Typ=n</a>
+                    </li>
+                    <li>
+                        <a href="">http://my.safaribooksonline.com/</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        <div id="react-content1">
+            <div id="artofcoding"/>
+        </div>
+        <div id="react-content2">
+            <div id="artofcoding-email"/>
+        </div>
+        <div id="react-content3">
+            <div id="content3"/>
+        </div>
+        <script type="text/jsx">
+            var items = [
+                {href: 'https://blog.art-of-coding.eu/', text: 'AoC Blog'},
+                {href: 'https://artofcoding.myjetbrains.com/youtrack/', text: 'YouTrack'},
+                {href: 'https://ci.art-of-coding.eu/', text: 'TeamCity'},
+                {href: 'https://ci.art-of-coding.eu/sonar/', text: 'Sonar'}
+            ];
+            React.renderComponent(<Hello name={"Art of Coding"} items={items}/>, document.getElementById('artofcoding'));
+        </script>
+        <script type="text/jsx">
+            var items2 = [
+                {href: 'https://mx.1ci.net/iredadmin', text: 'mx.1ci.net iRedAdmin'}
+            ];
+            React.renderComponent(<Hello name={"E-Mail, Kontakte und Kalender"} items={items2}/>, document.getElementById('artofcoding-email'));
+        </script>
+        <script type="text/javascript" src="http://localhost:8080/flux/js/jquery.161"></script>
+        <script type="text/javascript" charset="utf-8">
+            $(document).ready(function() {
+                $('.aoc-collapsible-content').css('display', 'none');
+                $('.aoc-collapsible-header').toggle(
+                    function() {
+                        $(this).next('.aoc-collapsible-content').fadeIn(300);
+                    },
+                    function() {
+                        $(this).next('.aoc-collapsible-content').fadeOut(300);
+                    }
+                );
+                $('a').click(function() {
+                    $(this).attr('target', '_blank')
+                });
+            });
+        </script>
+    </body>
+</html>
