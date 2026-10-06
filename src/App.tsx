@@ -101,14 +101,15 @@ export function App() {
     }
   }
 
-  function persist(next: System[]) {
+  function persist(next: System[], doneMessage?: string) {
     setSystems(next)
     setStatus(t.saving)
     const markdown = serializeDashboard(next)
+    const finished = doneMessage ?? t.saved
     saveChain.current = saveChain.current.then(async () => {
       try {
         await saveDashboard(markdown)
-        setStatus(t.saved)
+        setStatus(finished)
         setError('')
       } catch {
         setError(t.saveFailed)
@@ -228,8 +229,7 @@ export function App() {
                     setStatus(t.nothingImported)
                     return
                   }
-                  persist(result.systems)
-                  setStatus(t.imported(result.added, result.skipped))
+                  persist(result.systems, t.imported(result.added, result.skipped))
                 })
               }}
             />
