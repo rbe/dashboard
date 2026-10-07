@@ -10,7 +10,7 @@ process.stdout.write(`# ${tag}
 
 ## macOS binary
 
-\`dashboard-macos\` is one universal binary for Apple silicon and Intel. Node.js is not required.
+\`dashboard-macos\` is one Apple silicon binary. Node.js is not required.
 
 \`\`\`sh
 chmod +x dashboard-macos

@@ -6,7 +6,7 @@ Local markdown dashboard for systems and links. The board is stored in a file on
 
 ### macOS binary
 
-GitHub Releases include `dashboard-macos`, one universal binary for Apple silicon and Intel. Node.js is not required.
+GitHub Releases include `dashboard-macos`, one Apple silicon binary. Node.js is not required.
 
 ```sh
 chmod +x dashboard-macos
@@ -55,4 +55,4 @@ npm test
 npm run package:binary
 ```
 
-`package:binary` writes a single executable for the current platform to `build/dashboard`. On macOS, `node scripts/build-binary.mjs --universal-macos` writes `build/dashboard-macos`. Tagging `vX.Y.Z` (matching `package.json`) builds that universal binary and the npm tarball and attaches both to the GitHub release.
+`package:binary` writes a single executable for the current platform to `build/dashboard`. On macOS, `node scripts/build-binary.mjs --macos` writes `build/dashboard-macos` for Apple silicon. Tagging `vX.Y.Z` (matching `package.json`) builds that binary and the npm tarball and attaches both to the GitHub release.

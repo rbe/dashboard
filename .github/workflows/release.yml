@@ -43,14 +43,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - run: node scripts/build-binary.mjs --universal-macos
-      - name: Check the universal binary
+      - run: node scripts/build-binary.mjs --macos
+      - name: Check the Apple silicon binary
         run: |
           set -euo pipefail
-          info=$(lipo -info build/dashboard-macos)
-          echo "$info"
-          echo "$info" | grep -q arm64
-          echo "$info" | grep -q x86_64
+          archs=$(lipo -archs build/dashboard-macos)
+          echo "$archs"
+          test "$archs" = "arm64"
           file build/dashboard-macos
       - run: node scripts/smoke-binary.mjs build/dashboard-macos
       - uses: actions/upload-artifact@v4

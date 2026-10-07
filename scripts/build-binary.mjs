@@ -68,8 +68,6 @@ async function downloadNodeBinary(version, platform, arch) {
   fs.rmSync(archive, { force: true })
   const binary = path.join(dest, folder, 'bin', 'node')
   if (!fs.existsSync(binary)) throw new Error(`Node binary missing from ${url}`)
-  // Only the matching architecture can be executed here. Apple silicon runners
-  // cannot start the Intel slice unless Rosetta is installed.
   if (platform === process.platform && arch === process.arch) {
     const downloaded = execFileSync(binary, ['-p', 'process.version'], { encoding: 'utf8' }).trim()
     if (downloaded !== version) throw new Error(`Downloaded Node ${downloaded}, expected ${version}`)
@@ -78,11 +76,11 @@ async function downloadNodeBinary(version, platform, arch) {
 }
 
 async function main() {
-  const universal = process.argv.includes('--universal-macos')
+  const macos = process.argv.includes('--macos')
   const major = Number(process.versions.node.split('.')[0])
   if (major < 22) throw new Error('Building the single binary requires Node.js 22 or newer.')
-  if (universal && process.platform !== 'darwin') {
-    throw new Error('--universal-macos must run on macOS so it can codesign and lipo the binary.')
+  if (macos && process.platform !== 'darwin') {
+    throw new Error('--macos must run on macOS so it can codesign the binary.')
   }
   if (!fs.existsSync(path.join(distDir, 'index.html'))) {
     throw new Error('dist/index.html is missing. Run npm run build first.')
@@ -115,26 +113,17 @@ async function main() {
   fs.writeFileSync(configPath, JSON.stringify(config))
   run(process.execPath, ['--experimental-sea-config', configPath])
 
-  if (!universal) {
+  if (!macos) {
     const outfile = path.join(buildDir, 'dashboard')
     inject(fs.realpathSync(process.execPath), outfile, process.platform)
     console.log(`Wrote ${outfile}`)
     return
   }
 
-  const version = process.version
-  const arm = await downloadNodeBinary(version, 'darwin', 'arm64')
-  const x64 = await downloadNodeBinary(version, 'darwin', 'x64')
-  const armOut = path.join(buildDir, 'dashboard-darwin-arm64')
-  const x64Out = path.join(buildDir, 'dashboard-darwin-x64')
-  inject(arm, armOut, 'darwin')
-  inject(x64, x64Out, 'darwin')
-  const universalOut = path.join(buildDir, 'dashboard-macos')
-  fs.rmSync(universalOut, { force: true })
-  run('lipo', ['-create', '-output', universalOut, armOut, x64Out])
-  run('codesign', ['--sign', '-', universalOut])
-  fs.chmodSync(universalOut, 0o755)
-  console.log(`Wrote ${universalOut}`)
+  const arm = await downloadNodeBinary(process.version, 'darwin', 'arm64')
+  const outfile = path.join(buildDir, 'dashboard-macos')
+  inject(arm, outfile, 'darwin')
+  console.log(`Wrote ${outfile}`)
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
