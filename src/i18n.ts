@@ -1,6 +1,4 @@
-import type { Lang } from './types'
-
-export const en = {
+export const messages = {
   title: 'Dashboard',
   subtitle: 'Local overview',
   search: 'Search systems, tags, URLs',
@@ -53,7 +51,6 @@ export const en = {
   format: 'Markdown format',
   up: 'Move up',
   down: 'Move down',
-  language: 'Language',
   noTask: 'No task',
   untagged: 'Untagged',
   unset: 'Unset',
@@ -68,76 +65,4 @@ export const en = {
   close: 'Close',
 }
 
-export const de: typeof en = {
-  title: 'Dashboard',
-  subtitle: 'Lokale Übersicht',
-  search: 'Systeme, Tags, URLs suchen',
-  cards: 'Karten',
-  list: 'Liste',
-  collapse: 'Klappbar',
-  groupBy: 'Gruppieren',
-  subject: 'Thema',
-  task: 'Aufgabe',
-  tag: 'Tag',
-  add: 'System hinzufügen',
-  importBookmarks: 'Lesezeichen importieren',
-  sample: 'Beispiel laden',
-  reload: 'Datei neu laden',
-  saved: 'Gespeichert',
-  saving: 'Speichert…',
-  saveFailed: 'Die lokale Datei konnte nicht gespeichert werden.',
-  loadFailed: 'Die lokale Datei konnte nicht gelesen werden. Starte die App mit npm start, damit sie lokal schreiben kann.',
-  pinned: 'Angeheftet',
-  edit: 'Bearbeiten',
-  save: 'Speichern',
-  cancel: 'Abbrechen',
-  delete: 'Löschen',
-  confirmDelete: 'System löschen',
-  name: 'Name',
-  summary: 'Kurztext',
-  note: 'Notiz',
-  tags: 'Tags',
-  links: 'Links',
-  label: 'Bezeichnung',
-  url: 'URL',
-  role: 'Rolle',
-  addLink: 'Link hinzufügen',
-  addField: 'Feld hinzufügen',
-  fields: 'Weitere Felder',
-  fieldHint: 'Weitere Felder sind extra Gruppen. env, kunde, standort — jeder Name ist möglich.',
-  pinnedLabel: 'Oben anheften',
-  noLinks: 'Keine Links',
-  emptyTitle: 'Eine Übersicht der Systeme, die du wirklich brauchst',
-  emptyBody:
-    'System hinzufügen, eine bookmarks.html importieren oder das Beispiel laden. Die Links liegen in einer lokalen Markdown-Datei und werden nicht ins Git übernommen.',
-  noMatches: 'Nichts passt zu dieser Suche.',
-  imported: (added: number, skipped: number) =>
-    `${added} importiert. ${skipped} waren schon auf der Übersicht.`,
-  nothingImported: 'In der Datei waren keine http(s)-Lesezeichen.',
-  replaceSample: 'Die lokale Übersicht durch das Beispiel ersetzen?',
-  file: 'Lokale Datei',
-  gitignored: 'Git ignoriert diese Datei. Im Repository liegt nur das Programm.',
-  handEdit: 'Die Markdown-Datei kannst du von Hand ändern. Neu laden übernimmt das.',
-  format: 'Markdown-Format',
-  up: 'Nach oben',
-  down: 'Nach unten',
-  language: 'Sprache',
-  noTask: 'Ohne Aufgabe',
-  untagged: 'Ohne Tag',
-  unset: 'Ohne Wert',
-  required: 'Ein Name ist nötig.',
-  badUrl: 'Bitte eine http- oder https-URL ohne Passwort darin.',
-  badField: 'Feldnamen beginnen mit einem Buchstaben und nutzen Buchstaben, Ziffern, _ oder -.',
-  reservedField: 'Dieser Feldname ist reserviert.',
-  duplicateField: 'Feldnamen müssen eindeutig sein.',
-  remove: 'Entfernen',
-  count: (n: number) => (n === 1 ? '1 System' : `${n} Systeme`),
-  noteOnCard: 'Notiz',
-  close: 'Schließen',
-}
-
-export function messages(lang: Lang) {
-  return lang === 'de' ? de : en
-}
-
-export type Messages = typeof en
+export type Messages = typeof messages

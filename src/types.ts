@@ -18,5 +18,3 @@ export type System = {
 }
 
 export type View = 'cards' | 'list' | 'collapse'
-
-export type Lang = 'en' | 'de'
