@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run package:binary
+      - run: node scripts/smoke-binary.mjs build/dashboard
+      - name: Install the packed npm package
+        run: |
+          set -euo pipefail
+          stage=$(mktemp -d)
+          npm pack --pack-destination "$stage"
+          tgz=$(echo "$stage"/dashboard-*.tgz)
+          prefix="$stage/prefix"
+          npm install -g "$tgz" --prefix "$prefix"
+          "$prefix/bin/dashboard" --help
+          node scripts/smoke-binary.mjs "$prefix/bin/dashboard"

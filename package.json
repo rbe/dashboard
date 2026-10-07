@@ -1,24 +1,45 @@
 {
   "name": "dashboard",
-  "private": true,
   "version": "1.0.0",
+  "description": "Local markdown dashboard for systems and links",
   "type": "module",
+  "bin": {
+    "dashboard": "bin/dashboard.mjs"
+  },
+  "files": [
+    "bin/dashboard.mjs",
+    "scripts/cli.mjs",
+    "scripts/server.mjs",
+    "scripts/dashboard-api.mjs",
+    "dist",
+    "data/dashboard.example.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rbe/dashboard.git"
+  },
+  "engines": {
+    "node": ">=20.12"
+  },
   "scripts": {
     "start": "vite --host 127.0.0.1 --port 5173",
     "dev": "vite --host 127.0.0.1 --port 5173",
     "build": "tsc --noEmit && vite build",
     "preview": "npm run build && node scripts/serve.mjs",
+    "dashboard": "node bin/dashboard.mjs",
+    "package:binary": "npm run build && node scripts/build-binary.mjs",
+    "prepack": "npm run build",
     "test": "vitest run"
-  },
-  "dependencies": {
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0"
   },
   "devDependencies": {
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.5.0",
+    "esbuild": "^0.28.2",
     "happy-dom": "^17.4.4",
+    "postject": "1.0.0-alpha.6",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
     "vitest": "^3.1.4"
