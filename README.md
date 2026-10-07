@@ -32,12 +32,6 @@ npm install -g https://github.com/rbe/dashboard/releases/download/v1.0.0/dashboa
 
 `npm install -g dashboard` does not install this project. That name on the public npm registry already belongs to a different package. Publishing this package there is wired up in the release workflow and stays off until the repository variable `NPM_PUBLISH` is `true` and the `NPM_TOKEN` secret is set.
 
-From a checkout you can also install the git dependency, which builds before it links the command:
-
-```sh
-npm install -g github:rbe/dashboard
-```
-
 ## Run from a checkout
 
 ```sh

@@ -67,8 +67,13 @@ async function downloadNodeBinary(version, platform, arch) {
   run('tar', ['-xzf', archive, '-C', dest, `${folder}/bin/node`])
   fs.rmSync(archive, { force: true })
   const binary = path.join(dest, folder, 'bin', 'node')
-  const downloaded = execFileSync(binary, ['-p', 'process.version'], { encoding: 'utf8' }).trim()
-  if (downloaded !== version) throw new Error(`Downloaded Node ${downloaded}, expected ${version}`)
+  if (!fs.existsSync(binary)) throw new Error(`Node binary missing from ${url}`)
+  // Only the matching architecture can be executed here. Apple silicon runners
+  // cannot start the Intel slice unless Rosetta is installed.
+  if (platform === process.platform && arch === process.arch) {
+    const downloaded = execFileSync(binary, ['-p', 'process.version'], { encoding: 'utf8' }).trim()
+    if (downloaded !== version) throw new Error(`Downloaded Node ${downloaded}, expected ${version}`)
+  }
   return binary
 }
 
