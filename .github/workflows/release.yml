@@ -1,0 +1,127 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Check the tag matches package.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          pkg=$(node -p "require('./package.json').version")
+          if [ "$tag" != "$pkg" ]; then
+            echo "Tag v$tag does not match package.json version $pkg"
+            exit 1
+          fi
+      - run: npm ci
+      - run: npm test
+      - run: npm run package:binary
+      - run: node scripts/smoke-binary.mjs build/dashboard
+
+  macos:
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: node scripts/build-binary.mjs --macos
+      - name: Check the Apple silicon binary
+        run: |
+          set -euo pipefail
+          archs=$(lipo -archs build/dashboard-macos)
+          echo "$archs"
+          test "$archs" = "arm64"
+          file build/dashboard-macos
+      - run: node scripts/smoke-binary.mjs build/dashboard-macos
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-macos
+          path: build/dashboard-macos
+          if-no-files-found: error
+
+  npm-package:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: mkdir -p build && npm pack --pack-destination build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-tarball
+          path: build/dashboard-*.tgz
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [macos, npm-package]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          binary=release/dashboard-macos/dashboard-macos
+          tgz=$(echo release/npm-tarball/dashboard-*.tgz)
+          tgz_name=$(basename "$tgz")
+          {
+            echo "$(sha256sum "$binary" | awk '{print $1}')  dashboard-macos"
+            echo "$(sha256sum "$tgz" | awk '{print $1}')  $tgz_name"
+          } > SHA256SUMS
+          TGZ_NAME="$tgz_name" node scripts/release-notes.mjs > notes.md
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$binary" "$tgz" SHA256SUMS --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$binary" "$tgz" SHA256SUMS \
+              --title "$GITHUB_REF_NAME" \
+              --notes-file notes.md
+          fi
+
+  publish-npm:
+    if: startsWith(github.ref, 'refs/tags/v') && vars.NPM_PUBLISH == 'true'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
