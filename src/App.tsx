@@ -7,7 +7,7 @@ import { importBookmarks } from './bookmarks'
 import { fieldKeys, groupSystems, matches, moveWithinSubject } from './group'
 import { messages } from './i18n'
 import { blankSystem, parseDashboard, serializeDashboard, uniqueId } from './markdown'
-import type { Lang, System, View } from './types'
+import type { System, View } from './types'
 
 const FORMAT = `# Subject
 
@@ -30,7 +30,6 @@ function useStored(key: string, fallback: string) {
 }
 
 export function App() {
-  const [lang, setLang] = useStored('aoc-dashboard.lang', navigator.language.toLowerCase().startsWith('de') ? 'de' : 'en')
   const [view, setView] = useStored('aoc-dashboard.view', 'cards')
   const [groupBy, setGroupBy] = useStored('aoc-dashboard.groupBy', 'subject')
   const [closed, setClosed] = useState<string[]>(() => {
@@ -52,13 +51,12 @@ export function App() {
   const searchRef = useRef<HTMLInputElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const saveChain = useRef(Promise.resolve())
-  const t = messages(lang === 'de' ? 'de' : 'en')
+  const t = messages
   const activeView: View = view === 'list' || view === 'collapse' ? view : 'cards'
 
   useEffect(() => {
-    document.documentElement.lang = lang === 'de' ? 'de' : 'en'
     document.title = t.title
-  }, [lang, t.title])
+  }, [t.title])
 
   useEffect(() => {
     localStorage.setItem('aoc-dashboard.closed', JSON.stringify(closed))
@@ -195,13 +193,6 @@ export function App() {
                 ))}
               </select>
             </label>
-            <div className="segment" role="group" aria-label={t.language}>
-              {(['en', 'de'] as const).map((item) => (
-                <button key={item} type="button" aria-pressed={lang === item} onClick={() => setLang(item as Lang)}>
-                  {item === 'en' ? 'EN' : 'DE'}
-                </button>
-              ))}
-            </div>
             <button type="button" disabled={!systems} onClick={() => fileRef.current?.click()}>
               {t.importBookmarks}
             </button>
