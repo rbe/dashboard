@@ -1,14 +1,17 @@
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
-import http from 'node:http'
+import https from 'node:https'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { createStore } from './dashboard-api.mjs'
 import { filesystemAssets, requestPathname, safeRelative, startServer } from './server.mjs'
+import { generateSelfSignedCertificate } from './tls-cert.mjs'
+
+const tls = generateSelfSignedCertificate()
 
 function get(port, pathname) {
   return new Promise((resolve, reject) => {
-    const req = http.request({ host: '127.0.0.1', port, path: pathname }, (res) => {
+    const req = https.request({ host: '127.0.0.1', port, path: pathname, rejectUnauthorized: false }, (res) => {
       const chunks = []
       res.on('data', (chunk) => chunks.push(chunk))
       res.on('end', () => {
@@ -51,6 +54,8 @@ describe('dashboard server', () => {
         port: 0,
         store: createStore(path.join(dir, 'board.md')),
         readAsset,
+        cert: tls.cert,
+        key: tls.key,
       })
       const { port } = server.address()
       try {

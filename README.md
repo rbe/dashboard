@@ -14,7 +14,7 @@ xattr -d com.apple.quarantine dashboard-macos
 ./dashboard-macos
 ```
 
-Open http://127.0.0.1:4173. The binary is ad-hoc signed, so the first launch may need approval in System Settings → Privacy & Security.
+Open https://127.0.0.1:4173. The binary is ad-hoc signed, so the first launch may need approval in System Settings → Privacy & Security. The server certificate is self-signed. The first launch writes it to `data/tls/cert.pem`, and the browser asks before trusting it.
 
 ### npm
 
@@ -39,7 +39,7 @@ npm install
 npm start
 ```
 
-The dev server listens on http://127.0.0.1:5173. `npm run preview` builds and serves the production UI on http://127.0.0.1:4173.
+The dev server listens on http://127.0.0.1:5173. `npm run preview` builds and serves the production UI on https://127.0.0.1:4173. That server uses a self-signed certificate, `data/tls/cert.pem` and `data/tls/key.pem`, and creates the pair when it is missing. An expired pair is replaced. `--cert` and `--key` (or `DASHBOARD_TLS_CERT` and `DASHBOARD_TLS_KEY`) select different files.
 
 ```sh
 dashboard --help
@@ -57,7 +57,7 @@ make build
 make run
 ```
 
-Open http://127.0.0.1:4173. `make run` starts the container in the background, and `make stop` stops and removes it. The board file is `data/dashboard.md` in this directory, mounted into the container. `make run PORT=9000` listens on that port. `make help` lists the targets.
+Open https://127.0.0.1:4173. `make run` starts the container in the background, and `make stop` stops and removes it. The board file is `data/dashboard.md` in this directory, mounted into the container, and the self-signed certificate is written to `data/tls/` there. `make run PORT=9000` listens on that port. `make help` lists the targets.
 
 ## Package
 

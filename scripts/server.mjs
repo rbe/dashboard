@@ -1,5 +1,5 @@
 import fs from 'node:fs'
-import http from 'node:http'
+import https from 'node:https'
 import path from 'node:path'
 import { handleDashboardApi } from './dashboard-api.mjs'
 
@@ -84,8 +84,9 @@ function sendFile(res, method, file, body) {
   res.end(method === 'HEAD' ? undefined : body)
 }
 
-export function startServer({ host, port, readAsset, store }) {
-  const server = http.createServer((req, res) => {
+export function startServer({ host, port, readAsset, store, cert, key }) {
+  if (cert == null || key == null) throw new Error('Missing TLS certificate')
+  const server = https.createServer({ cert, key }, (req, res) => {
     const pathname = requestPathname(req.url)
     if (!pathname) {
       res.statusCode = 400

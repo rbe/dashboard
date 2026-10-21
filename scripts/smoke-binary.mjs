@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
-import http from 'node:http'
+import https from 'node:https'
 import net from 'node:net'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -24,13 +24,14 @@ function freePort() {
 
 function request(port, pathname, options = {}) {
   return new Promise((resolve, reject) => {
-    const req = http.request(
+    const req = https.request(
       {
         host: '127.0.0.1',
         port,
         path: pathname,
         method: options.method || 'GET',
         headers: options.headers,
+        rejectUnauthorized: false,
       },
       (res) => {
         const chunks = []
@@ -53,7 +54,15 @@ function request(port, pathname, options = {}) {
 const port = await freePort()
 const dir = mkdtempSync(path.join(tmpdir(), 'dashboard-smoke-'))
 const file = path.join(dir, 'board.md')
-const child = spawn(path.resolve(command), ['--port', String(port), '--host', '127.0.0.1', '--file', file], {
+const cert = path.join(dir, 'cert.pem')
+const key = path.join(dir, 'key.pem')
+const child = spawn(path.resolve(command), [
+  '--port', String(port),
+  '--host', '127.0.0.1',
+  '--file', file,
+  '--cert', cert,
+  '--key', key,
+], {
   stdio: ['ignore', 'pipe', 'pipe'],
 })
 let logs = ''

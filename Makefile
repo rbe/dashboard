@@ -16,8 +16,9 @@ help: ## Show this help
 	@echo "Targets:"
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-8s %s\n", $$1, $$2}'
 	@echo
-	@echo "make run is detached and listens on http://127.0.0.1:$(PORT)."
+	@echo "make run is detached and listens on https://127.0.0.1:$(PORT)."
 	@echo "The board file is ./data/dashboard.md (mounted into the container)."
+	@echo "The self-signed certificate is ./data/tls/cert.pem."
 	@echo "Override the port with: make run PORT=9000"
 
 build: ## Build the container image
@@ -30,7 +31,7 @@ run: build ## Run the app detached (stop it with make stop)
 		-e DASHBOARD_FILE=/app/data/dashboard.md \
 		-v "$(CURDIR)/data:/app/data:Z" \
 		$(IMAGE)
-	@echo "Dashboard at http://127.0.0.1:$(PORT)"
+	@echo "Dashboard at https://127.0.0.1:$(PORT)"
 
 stop: ## Stop and remove the detached container
 	podman rm --force --ignore $(NAME)

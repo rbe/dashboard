@@ -7,3 +7,4 @@ build
 .DS_Store
 data/dashboard.md
 data/*.tmp
+data/tls

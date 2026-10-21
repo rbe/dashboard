@@ -11,6 +11,7 @@
     "scripts/cli.mjs",
     "scripts/server.mjs",
     "scripts/dashboard-api.mjs",
+    "scripts/tls-cert.mjs",
     "dist",
     "data/dashboard.example.md"
   ],
