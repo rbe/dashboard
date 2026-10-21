@@ -1,0 +1,51 @@
+# Linux host checks: install, test, binary, and the packed CLI.
+# CI calls this on pull requests and pushes to master.
+# Release calls this on tags and workflow_dispatch.
+# Container does not call this, so an event runs these steps once.
+# npm pack --ignore-scripts: package:binary already ran npm run build,
+# and prepack would compile again. dist is listed in package.json "files".
+
+name: Host test
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "24"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Check the tag matches package.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          pkg=$(node -p "require('./package.json').version")
+          if [ "$tag" != "$pkg" ]; then
+            echo "Tag v$tag does not match package.json version $pkg"
+            exit 1
+          fi
+      - run: npm ci
+      - run: npm test
+      - run: npm run package:binary
+      - run: node scripts/smoke-binary.mjs build/dashboard
+      - name: Install the packed npm package
+        run: |
+          set -euo pipefail
+          stage=$(mktemp -d)
+          npm pack --ignore-scripts --pack-destination "$stage"
+          tgz=$(echo "$stage"/dashboard-*.tgz)
+          prefix="$stage/prefix"
+          npm install -g "$tgz" --prefix "$prefix"
+          "$prefix/bin/dashboard" --help
+          node scripts/smoke-binary.mjs "$prefix/bin/dashboard"

@@ -61,13 +61,19 @@ Open https://127.0.0.1:4173. `make run` starts the container in the background, 
 
 ## GitHub Container Registry
 
-The Container workflow tests the app, builds the image, packages tags from `package.json`, and publishes to GHCR. Pull requests build and smoke-test the image and do not publish. `master` publishes `ghcr.io/rbe/dashboard:edge` and `ghcr.io/rbe/dashboard:sha-<commit>`. A tag `vX.Y.Z` that matches `package.json` also publishes `X.Y.Z`, `X.Y`, `X`, and `latest`.
+CI, Container, and Release stay separate workflows. The Linux host checks and the image build are reusable workflows, and each event calls each one from a single entry point.
+
+On a pull request, CI runs the host checks once (`npm ci`, `npm test`, the Linux binary, and a packed CLI smoke). Container builds the image once, smokes that loaded image, and does not publish.
+
+On `master`, CI runs those host checks once. Container builds the image once, smokes it, and pushes that same image as `ghcr.io/rbe/dashboard:edge` and `ghcr.io/rbe/dashboard:sha-<commit>`.
+
+A tag `vX.Y.Z` that matches `package.json` runs the Linux checks once from Release, then the macOS binary, the npm tarball, and the GitHub release. Container builds the image once and publishes `X.Y.Z`, `X.Y`, `X`, and `latest`. Publishing this package to npm stays off until the repository variable `NPM_PUBLISH` is `true`.
 
 ```sh
 podman pull ghcr.io/rbe/dashboard:latest
 ```
 
-The published image is `linux/amd64`. `NODE_VERSION` in that workflow (and `make build NODE_VERSION=24`) selects the Node major inside the image.
+The published image is `linux/amd64`. Host checks and the image use Node 24. `make build` passes that same major into the image. Podman and make do not need Node.js on the host.
 
 ## Package
 

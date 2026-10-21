@@ -1,3 +1,6 @@
+# Pull requests and master. Calls the Linux host checks once.
+# Tags are Release's event, so this workflow does not run on v*.
+
 name: CI
 
 on:
@@ -5,29 +8,11 @@ on:
     branches: [master]
   pull_request:
 
-env:
-  NODE_VERSION: "24"
+permissions:
+  contents: read
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-      - run: npm ci
-      - run: npm test
-      - run: npm run package:binary
-      - run: node scripts/smoke-binary.mjs build/dashboard
-      - name: Install the packed npm package
-        run: |
-          set -euo pipefail
-          stage=$(mktemp -d)
-          npm pack --pack-destination "$stage"
-          tgz=$(echo "$stage"/dashboard-*.tgz)
-          prefix="$stage/prefix"
-          npm install -g "$tgz" --prefix "$prefix"
-          "$prefix/bin/dashboard" --help
-          node scripts/smoke-binary.mjs "$prefix/bin/dashboard"
+    permissions:
+      contents: read
+    uses: ./.github/workflows/host-test.yml
