@@ -7,7 +7,7 @@ IMAGE ?= localhost/dashboard:latest
 NAME  ?= dashboard
 PORT  ?= 4173
 # Same Node major as NODE_VERSION in the GitHub workflows.
-NODE_VERSION ?= 22
+NODE_VERSION ?= 24
 
 .DEFAULT_GOAL := help
 .PHONY: help build run stop
