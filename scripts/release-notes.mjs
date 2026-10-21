@@ -18,7 +18,9 @@ xattr -d com.apple.quarantine dashboard-macos
 ./dashboard-macos
 \`\`\`
 
-Then open http://127.0.0.1:4173
+Then open https://127.0.0.1:4173
+
+The certificate is self-signed. The first launch writes it to data/tls/cert.pem.
 
 The binary is ad-hoc signed. The first launch may still need approval in System Settings → Privacy & Security.
 

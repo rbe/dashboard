@@ -22,7 +22,7 @@ WORKDIR /app
 
 COPY --from=build /src/dist ./dist
 COPY bin/dashboard.mjs ./bin/dashboard.mjs
-COPY scripts/cli.mjs scripts/server.mjs scripts/dashboard-api.mjs ./scripts/
+COPY scripts/cli.mjs scripts/server.mjs scripts/dashboard-api.mjs scripts/tls-cert.mjs ./scripts/
 COPY data/dashboard.example.md ./data/dashboard.example.md
 
 # Root inside the container is the invoking user under rootless Podman,
