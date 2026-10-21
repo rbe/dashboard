@@ -59,6 +59,16 @@ make run
 
 Open https://127.0.0.1:4173. `make run` starts the container in the background, and `make stop` stops and removes it. The board file is `data/dashboard.md` in this directory, mounted into the container, and the self-signed certificate is written to `data/tls/` there. `make run PORT=9000` listens on that port. `make help` lists the targets.
 
+## GitHub Container Registry
+
+The Container workflow tests the app, builds the image, packages tags from `package.json`, and publishes to GHCR. Pull requests build and smoke-test the image and do not publish. `master` publishes `ghcr.io/rbe/dashboard:edge` and `ghcr.io/rbe/dashboard:sha-<commit>`. A tag `vX.Y.Z` that matches `package.json` also publishes `X.Y.Z`, `X.Y`, `X`, and `latest`.
+
+```sh
+podman pull ghcr.io/rbe/dashboard:latest
+```
+
+The published image is `linux/amd64`. `NODE_VERSION` in that workflow (and `make build NODE_VERSION=22`) selects the Node major inside the image.
+
 ## Package
 
 ```sh
@@ -66,4 +76,4 @@ npm test
 npm run package:binary
 ```
 
-`package:binary` writes a single executable for the current platform to `build/dashboard`. On macOS, `node scripts/build-binary.mjs --macos` writes `build/dashboard-macos` for Apple silicon. Tagging `vX.Y.Z` (matching `package.json`) builds that binary and the npm tarball and attaches both to the GitHub release.
+`package:binary` writes a single executable for the current platform to `build/dashboard`. On macOS, `node scripts/build-binary.mjs --macos` writes `build/dashboard-macos` for Apple silicon. Tagging `vX.Y.Z` (matching `package.json`) builds that binary and the npm tarball and attaches both to the GitHub release. The same tag publishes the container image.

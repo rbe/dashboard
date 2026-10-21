@@ -1,0 +1,132 @@
+# Test, build, package, and publish the dashboard image.
+# NODE_VERSION is the Node major for this workflow and for the image.
+
+name: Container
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+concurrency:
+  group: container-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  build:
+    name: Build
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Containerfile
+          push: false
+          load: true
+          provenance: false
+          build-args: NODE_VERSION=${{ env.NODE_VERSION }}
+          tags: dashboard:ci
+          cache-from: type=gha,scope=dashboard
+          cache-to: ${{ github.event_name == 'push' && 'type=gha,scope=dashboard,mode=max' || '' }}
+      - name: Smoke test the image
+        run: |
+          set -euo pipefail
+          docker run -d --name dashboard-ci \
+            -p 127.0.0.1:4173:4173 \
+            -e PORT=4173 \
+            dashboard:ci
+          cleanup() {
+            status=$?
+            if [ "$status" -ne 0 ]; then
+              docker logs dashboard-ci || true
+            fi
+            docker rm -f dashboard-ci >/dev/null 2>&1 || true
+            exit "$status"
+          }
+          trap cleanup EXIT
+          ok=0
+          for _ in $(seq 1 30); do
+            if curl -fsS -k https://127.0.0.1:4173/api/dashboard | grep -q 'not for git'; then
+              ok=1
+              break
+            fi
+            sleep 1
+          done
+          test "$ok" = 1
+          curl -fsS -k https://127.0.0.1:4173/ | grep -q 'id="root"'
+
+  package:
+    name: Package
+    needs: build
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      publish: ${{ steps.version.outputs.publish }}
+      image: ${{ steps.version.outputs.image }}
+      tags: ${{ steps.version.outputs.tags }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Resolve image tags from package.json
+        id: version
+        run: node scripts/container-tags.mjs
+
+  publish:
+    name: Publish
+    needs: package
+    if: needs.package.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish to GHCR
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Containerfile
+          push: true
+          provenance: false
+          build-args: NODE_VERSION=${{ env.NODE_VERSION }}
+          tags: ${{ needs.package.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.package.outputs.version }}
+            org.opencontainers.image.title=dashboard
+          cache-from: type=gha,scope=dashboard
+          cache-to: type=gha,scope=dashboard,mode=max

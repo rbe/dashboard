@@ -6,6 +6,8 @@
 IMAGE ?= localhost/dashboard:latest
 NAME  ?= dashboard
 PORT  ?= 4173
+# Same Node major as NODE_VERSION in the GitHub workflows.
+NODE_VERSION ?= 22
 
 .DEFAULT_GOAL := help
 .PHONY: help build run stop
@@ -22,7 +24,7 @@ help: ## Show this help
 	@echo "Override the port with: make run PORT=9000"
 
 build: ## Build the container image
-	podman build -f Containerfile -t $(IMAGE) .
+	podman build -f Containerfile --build-arg NODE_VERSION=$(NODE_VERSION) -t $(IMAGE) .
 
 run: build ## Run the app detached (stop it with make stop)
 	podman run -d --replace --name $(NAME) \

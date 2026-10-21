@@ -1,6 +1,8 @@
 const tgz = process.env.TGZ_NAME
 const repo = process.env.GITHUB_REPOSITORY
 const tag = process.env.GITHUB_REF_NAME
+const version = tag && tag.startsWith('v') ? tag.slice(1) : tag
+const image = repo ? `ghcr.io/${repo.toLowerCase()}:${version}` : ''
 if (!tgz || !repo || !tag) {
   console.error('TGZ_NAME, GITHUB_REPOSITORY, and GITHUB_REF_NAME are required')
   process.exit(1)
@@ -23,6 +25,14 @@ Then open https://127.0.0.1:4173
 The certificate is self-signed. The first launch writes it to data/tls/cert.pem.
 
 The binary is ad-hoc signed. The first launch may still need approval in System Settings → Privacy & Security.
+
+## Container
+
+The image is \`${image}\` (linux/amd64).
+
+\`\`\`sh
+podman pull ${image}
+\`\`\`
 
 ## npm
 
