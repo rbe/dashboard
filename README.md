@@ -67,7 +67,7 @@ The Container workflow tests the app, builds the image, packages tags from `pack
 podman pull ghcr.io/rbe/dashboard:latest
 ```
 
-The published image is `linux/amd64`. `NODE_VERSION` in that workflow (and `make build NODE_VERSION=22`) selects the Node major inside the image.
+The published image is `linux/amd64`. `NODE_VERSION` in that workflow (and `make build NODE_VERSION=24`) selects the Node major inside the image.
 
 ## Package
 

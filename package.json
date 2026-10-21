@@ -20,7 +20,7 @@
     "url": "git+https://github.com/rbe/dashboard.git"
   },
   "engines": {
-    "node": ">=20.12"
+    "node": ">=24"
   },
   "scripts": {
     "start": "vite --host 127.0.0.1 --port 5173",

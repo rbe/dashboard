@@ -64,7 +64,7 @@ describe('container image tags', () => {
   })
 
   it('reads NODE_VERSION from the Containerfile', () => {
-    expect(containerfileNodeVersion('ARG NODE_VERSION=22\nFROM node:${NODE_VERSION}-bookworm-slim\n')).toBe('22')
-    expect(() => containerfileNodeVersion('FROM node:22\n')).toThrow(/NODE_VERSION/)
+    expect(containerfileNodeVersion('ARG NODE_VERSION=24\nFROM node:${NODE_VERSION}-bookworm-slim\n')).toBe('24')
+    expect(() => containerfileNodeVersion('FROM node:24\n')).toThrow(/NODE_VERSION/)
   })
 })
