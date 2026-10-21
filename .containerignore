@@ -1,0 +1,9 @@
+.git
+.github
+node_modules
+dist
+build
+*.local
+.DS_Store
+data/dashboard.md
+data/*.tmp

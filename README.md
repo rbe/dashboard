@@ -48,6 +48,17 @@ dashboard --port 4173 --file data/dashboard.md
 
 `PORT` and `DASHBOARD_FILE` set the same values. The default file is `data/dashboard.md` in the current directory.
 
+## Podman
+
+Podman and make are enough. Node.js and TypeScript are not required on the host; the image installs them and compiles the UI.
+
+```sh
+make build
+make run
+```
+
+Open http://127.0.0.1:4173. `make run` starts the container in the background, and `make stop` stops and removes it. The board file is `data/dashboard.md` in this directory, mounted into the container. `make run PORT=9000` listens on that port. `make help` lists the targets.
+
 ## Package
 
 ```sh
