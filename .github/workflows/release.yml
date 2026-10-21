@@ -1,8 +1,12 @@
+# Tags and manual runs. Branch pushes are CI's event, so this does not
+# listen for them and does not run the Linux host checks a second time.
+
 name: Release
 
 on:
   push:
-    tags: ['v*.*.*']
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
 
 permissions:

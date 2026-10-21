@@ -1,6 +1,6 @@
 # Linux host checks: install, test, binary, and the packed CLI.
-# CI calls this on pull requests and pushes to master.
-# Release calls this on tags and workflow_dispatch.
+# CI calls this on every branch push and on workflow_dispatch.
+# Release calls this on v* tags and on workflow_dispatch.
 # Container does not call this, so an event runs these steps once.
 # npm pack --ignore-scripts: package:binary already ran npm run build,
 # and prepack would compile again. dist is listed in package.json "files".
