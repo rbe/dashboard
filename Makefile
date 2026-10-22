@@ -1,21 +1,20 @@
 # Build and run the dashboard with Podman.
 #
-# build, run, and stop need the container engine and make only.
+# build, run, and stop need Podman and make only.
 # They do not install Node or TypeScript on the host.
 #
 # Targets whose descriptions start with "Match CI" are the steps the
-# GitHub workflows run. Linux jobs pass CONTAINER=docker. A laptop uses
-# Podman, the default, and does not need Docker.
+# GitHub workflows run. CI uses Podman too, the same commands as a laptop.
 #
-# Host checks and the image build run through that engine, so macOS and
-# Linux run the same Linux steps. Node 24 stays in the image.
+# Host checks and the image build run through Podman, so macOS and Linux
+# run the same Linux steps. Node 24 stays in the image.
 # macos-binary is the release job that codesigns on macOS. It uses Node 24
 # already on PATH and does not install Node.
 
 SHELL := /bin/bash
 
-CONTAINER ?= podman
 IMAGE ?= localhost/dashboard:latest
+CI_IMAGE ?= localhost/dashboard:ci
 NAME ?= dashboard
 PORT ?= 4173
 NODE_VERSION ?= 24
@@ -25,14 +24,6 @@ SMOKE_NAME ?= dashboard-ci
 SMOKE_PORT ?= 4173
 IMAGE_TAR ?= image/dashboard-image.tar
 RELEASE_DIR ?= release
-
-ifeq ($(CONTAINER),docker)
-CI_IMAGE ?= dashboard:ci
-BUILD_FLAGS ?= --load --provenance=false
-else
-CI_IMAGE ?= localhost/dashboard:ci
-BUILD_FLAGS ?=
-endif
 
 IMAGE_SOURCE ?= $(if $(GITHUB_SERVER_URL),$(GITHUB_SERVER_URL)/$(GITHUB_REPOSITORY),https://github.com/rbe/dashboard)
 IMAGE_REVISION ?= $(or $(GITHUB_SHA),local)
@@ -46,20 +37,20 @@ endif
 
 # Single line so the expanded command stays in one shell invocation.
 NODE_RUN_OPTS = --rm -e HOME=/tmp -e npm_config_cache=/tmp/npm-cache -e npm_config_update_notifier=false -e NODE_VERSION="$(NODE_VERSION)" -e IMAGE_NAME="$(IMAGE_NAME)" -e GITHUB_REF -e GITHUB_REF_NAME -e GITHUB_SHA -e GITHUB_REPOSITORY -e GITHUB_SERVER_URL -e GITHUB_OUTPUT -e TGZ_NAME -e CI -v "$(CURDIR)":/work:Z -w /work
-NODE_RUN = $(CONTAINER) run $(NODE_RUN_OPTS) $(NODE_IMAGE)
+NODE_RUN = podman run $(NODE_RUN_OPTS) $(NODE_IMAGE)
 
 .DEFAULT_GOAL := help
 .PHONY: help build run stop ci host-checks check-tag npm-ci test linux-binary smoke-linux-binary pack-smoke image-tags ci-image image smoke-image macos-binary npm-tarball release-assets image-save image-load image-push npm-publish
 
 help: ## Show this help
-	@echo "Host requirements for build, run, and stop: $(CONTAINER) and make."
+	@echo "Host requirements for build, run, and stop: Podman and make."
 	@echo "Node.js and TypeScript are not installed on the host. Node $(NODE_VERSION) stays in the image."
 	@echo
 	@echo "Targets:"
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-22s %s\n", $$1, $$2}'
 	@echo
 	@echo "Descriptions that start with \"Match CI\" are the steps the GitHub workflows run."
-	@echo "The engine is $(CONTAINER). CI Linux jobs pass CONTAINER=docker. A laptop does not need Docker."
+	@echo "The container engine is Podman, on a laptop and in CI."
 	@echo "make ci is a branch push: Linux host checks, then one image build and its smoke."
 	@echo "make run is detached and listens on https://127.0.0.1:$(PORT)."
 	@echo "The board file is ./data/dashboard.md (mounted into the container)."
@@ -67,11 +58,11 @@ help: ## Show this help
 	@echo "Override the port with: make run PORT=9000"
 
 build: ## Build the local image
-	$(CONTAINER) build $(BUILD_FLAGS) -f Containerfile --build-arg NODE_VERSION=$(NODE_VERSION) -t "$(IMAGE)" .
+	podman build -f Containerfile --build-arg NODE_VERSION=$(NODE_VERSION) -t "$(IMAGE)" .
 
 run: build ## Run the app detached (stop it with make stop)
-	@$(CONTAINER) rm -f $(NAME) >/dev/null 2>&1 || true
-	$(CONTAINER) run -d --name $(NAME) \
+	@podman rm -f $(NAME) >/dev/null 2>&1 || true
+	podman run -d --name $(NAME) \
 		-p 127.0.0.1:$(PORT):$(PORT) \
 		-e PORT=$(PORT) \
 		-e DASHBOARD_FILE=/app/data/dashboard.md \
@@ -80,7 +71,7 @@ run: build ## Run the app detached (stop it with make stop)
 	@echo "Dashboard at https://127.0.0.1:$(PORT)"
 
 stop: ## Stop and remove the detached container
-	@$(CONTAINER) rm -f $(NAME) >/dev/null 2>&1 || true
+	@podman rm -f $(NAME) >/dev/null 2>&1 || true
 	@echo "Stopped $(NAME)"
 
 ci: host-checks ci-image ## Match CI: Linux host checks, then one image build and smoke
@@ -119,12 +110,12 @@ image-tags: ## Match CI: resolve tags with scripts/container-tags.mjs
 	if [ -n "$${GITHUB_OUTPUT:-}" ]; then \
 	  extra="-v $${GITHUB_OUTPUT}:$${GITHUB_OUTPUT}"; \
 	fi; \
-	$(CONTAINER) run $(NODE_RUN_OPTS) $$extra $(NODE_IMAGE) node scripts/container-tags.mjs
+	podman run $(NODE_RUN_OPTS) $$extra $(NODE_IMAGE) node scripts/container-tags.mjs
 
 ci-image: smoke-image ## Match CI: build the image once, then smoke it
 
 image: ## Match CI: build the CI image from the Containerfile
-	$(CONTAINER) build $(BUILD_FLAGS) \
+	podman build \
 		-f Containerfile \
 		--build-arg NODE_VERSION=$(NODE_VERSION) \
 		--label org.opencontainers.image.source="$(IMAGE_SOURCE)" \
@@ -139,14 +130,13 @@ smoke-image: image ## Match CI: smoke the image from that build (needs curl)
 	command -v curl >/dev/null || { echo "smoke-image needs curl"; exit 1; }; \
 	name='$(SMOKE_NAME)'; \
 	port='$(SMOKE_PORT)'; \
-	engine='$(CONTAINER)'; \
 	image='$(CI_IMAGE)'; \
-	"$$engine" rm -f "$$name" >/dev/null 2>&1 || true; \
-	"$$engine" run -d --name "$$name" -p "127.0.0.1:$$port:4173" -e PORT=4173 "$$image"; \
+	podman rm -f "$$name" >/dev/null 2>&1 || true; \
+	podman run -d --name "$$name" -p "127.0.0.1:$$port:4173" -e PORT=4173 "$$image"; \
 	cleanup() { \
 	  status=$$?; \
-	  if [ "$$status" -ne 0 ]; then "$$engine" logs "$$name" || true; fi; \
-	  "$$engine" rm -f "$$name" >/dev/null 2>&1 || true; \
+	  if [ "$$status" -ne 0 ]; then podman logs "$$name" || true; fi; \
+	  podman rm -f "$$name" >/dev/null 2>&1 || true; \
 	  exit "$$status"; \
 	}; \
 	trap cleanup EXIT; \
@@ -211,10 +201,10 @@ release-assets: ## Match CI: write build/SHA256SUMS and build/notes.md
 	echo "Wrote build/SHA256SUMS and build/notes.md"
 
 image-save: ## Match CI: save the CI image to dashboard-image.tar
-	$(CONTAINER) save -o dashboard-image.tar "$(CI_IMAGE)"
+	podman save -o dashboard-image.tar "$(CI_IMAGE)"
 
 image-load: ## Match CI: load the saved image tar
-	$(CONTAINER) load -i "$(IMAGE_TAR)"
+	podman load -i "$(IMAGE_TAR)"
 
 image-push: ## Match CI: push the resolved tags (refuses when TAGS is empty)
 	@set -euo pipefail; \
@@ -223,7 +213,7 @@ image-push: ## Match CI: push the resolved tags (refuses when TAGS is empty)
 	  echo "image-push publishes $(CI_IMAGE). CI sets TAGS. Refusing to push."; \
 	  exit 1; \
 	fi; \
-	$(CONTAINER) image inspect "$(CI_IMAGE)" >/dev/null; \
+	podman image inspect "$(CI_IMAGE)" >/dev/null; \
 	set -f; \
 	IFS=','; \
 	set -- $$tags; \
@@ -231,8 +221,8 @@ image-push: ## Match CI: push the resolved tags (refuses when TAGS is empty)
 	count=0; \
 	for tag in "$$@"; do \
 	  [ -n "$$tag" ] || continue; \
-	  $(CONTAINER) tag "$(CI_IMAGE)" "$$tag"; \
-	  $(CONTAINER) push "$$tag"; \
+	  podman tag "$(CI_IMAGE)" "$$tag"; \
+	  podman push "$$tag"; \
 	  count=$$((count + 1)); \
 	done; \
 	test "$$count" -gt 0
