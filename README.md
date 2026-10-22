@@ -50,18 +50,26 @@ dashboard --port 4173 --file data/dashboard.md
 
 ## Podman
 
-Podman and make are enough. Node.js and TypeScript are not required on the host; the image installs them and compiles the UI.
+Podman and make are enough to build and run the app. Node.js and TypeScript are not required on the host; the image installs them and compiles the UI.
 
 ```sh
 make build
 make run
 ```
 
-Open https://127.0.0.1:4173. `make run` starts the container in the background, and `make stop` stops and removes it. The board file is `data/dashboard.md` in this directory, mounted into the container, and the self-signed certificate is written to `data/tls/` there. `make run PORT=9000` listens on that port. `make help` lists the targets.
+Open https://127.0.0.1:4173. `make run` starts the container in the background, and `make stop` stops and removes it. The board file is `data/dashboard.md` in this directory, mounted into the container, and the self-signed certificate is written to `data/tls/` there. `make run PORT=9000` listens on that port.
+
+`make help` lists every target. A description that starts with "Match CI" is a step the GitHub workflows run, so a laptop and CI share one command. The engine defaults to Podman. Linux GitHub jobs pass `CONTAINER=docker`. Docker is not required on a laptop.
+
+```sh
+make ci
+```
+
+`make ci` is what a branch push runs: `make host-checks` (`npm ci`, `npm test`, the Linux binary, and the packed CLI smoke) and then `make ci-image` (one image build, then the smoke of that image). Those commands run inside the Node 24 image. `make macos-binary` is the Apple silicon release binary. It runs on macOS and uses Node 24 already on PATH. It does not install Node.
 
 ## GitHub Container Registry
 
-CI, Container, and Release stay separate workflows. The Linux host checks and the image build are reusable workflows, and each event calls each one from a single entry point.
+CI, Container, and Release stay separate workflows. The Linux host checks and the image build are reusable workflows, and each event calls each one from a single entry point. Those jobs call the Makefile instead of copying the commands. Triggers, permissions, runner labels, checkout, GHCR login, artifact upload, and `gh release` stay in the workflow files.
 
 On a push to any branch, CI runs the host checks once (`npm ci`, `npm test`, the Linux binary, and a packed CLI smoke). Container builds the image once and smokes that loaded image. These workflows do not also listen for `pull_request`, so a same-repo branch is not tested twice. CI, Container, and Release can each be started by hand with `workflow_dispatch`.
 
@@ -73,13 +81,13 @@ A tag `vX.Y.Z` that matches `package.json` runs the Linux checks once from Relea
 podman pull ghcr.io/rbe/dashboard:latest
 ```
 
-The published image is `linux/amd64`. Host checks and the image use Node 24. `make build` passes that same major into the image. Podman and make do not need Node.js on the host.
+The published image is `linux/amd64`. Host checks and the image use Node 24. `make build` and `make ci-image` pass that same major into the image. Podman and make do not need Node.js on the host.
 
 ## Package
 
 ```sh
-npm test
-npm run package:binary
+make test
+make linux-binary
 ```
 
-`package:binary` writes a single executable for the current platform to `build/dashboard`. On macOS, `node scripts/build-binary.mjs --macos` writes `build/dashboard-macos` for Apple silicon. Tagging `vX.Y.Z` (matching `package.json`) builds that binary and the npm tarball and attaches both to the GitHub release. The same tag publishes the container image.
+`make linux-binary` writes the Linux executable CI builds to `build/dashboard`. On macOS, `make macos-binary` writes `build/dashboard-macos` for Apple silicon, using Node 24 already on PATH. Tagging `vX.Y.Z` (matching `package.json`) builds that binary and the npm tarball and attaches both to the GitHub release. The same tag publishes the container image. `make npm-tarball` builds that tarball locally.
