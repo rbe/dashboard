@@ -1,6 +1,9 @@
-# Build the dashboard image once, smoke the loaded image, and push that
-# same image when scripts/container-tags.mjs sets publish=true.
+# Build the dashboard image once, smoke that image, and push it when
+# scripts/container-tags.mjs sets publish=true.
 # Called only by the Container workflow.
+# The build, smoke, tag resolution, save, load, and push commands are
+# Makefile targets. Podman is the local engine. This job passes Docker
+# because GHCR login uses docker/login-action.
 # Dependency install and the UI compile stay in the Containerfile image layers.
 
 name: Container image
@@ -26,12 +29,9 @@ jobs:
       tags: ${{ steps.version.outputs.tags }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - name: Resolve image tags from package.json
+      - name: Resolve image tags
         id: version
-        run: node scripts/container-tags.mjs
+        run: make image-tags CONTAINER=docker
 
   build:
     name: Build
@@ -41,52 +41,15 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: Containerfile
-          push: false
-          load: true
-          provenance: false
-          build-args: NODE_VERSION=${{ env.NODE_VERSION }}
-          tags: dashboard:ci
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ needs.resolve.outputs.version }}
-            org.opencontainers.image.title=dashboard
-          cache-from: type=gha,scope=dashboard
-          cache-to: ${{ needs.resolve.outputs.publish == 'true' && 'type=gha,scope=dashboard,mode=max' || '' }}
-      - name: Smoke test the image
-        run: |
-          set -euo pipefail
-          docker run -d --name dashboard-ci \
-            -p 127.0.0.1:4173:4173 \
-            -e PORT=4173 \
-            dashboard:ci
-          cleanup() {
-            status=$?
-            if [ "$status" -ne 0 ]; then
-              docker logs dashboard-ci || true
-            fi
-            docker rm -f dashboard-ci >/dev/null 2>&1 || true
-            exit "$status"
-          }
-          trap cleanup EXIT
-          ok=0
-          for _ in $(seq 1 30); do
-            if curl -fsS -k https://127.0.0.1:4173/api/dashboard | grep -q 'not for git'; then
-              ok=1
-              break
-            fi
-            sleep 1
-          done
-          test "$ok" = 1
-          curl -fsS -k https://127.0.0.1:4173/ | grep -q 'id="root"'
+      - name: Build the image once and smoke it
+        run: make ci-image CONTAINER=docker
+        env:
+          IMAGE_SOURCE: ${{ github.server_url }}/${{ github.repository }}
+          IMAGE_REVISION: ${{ github.sha }}
+          IMAGE_VERSION: ${{ needs.resolve.outputs.version }}
       - name: Save the loaded image
         if: success() && needs.resolve.outputs.publish == 'true'
-        run: docker save dashboard:ci --output dashboard-image.tar
+        run: make image-save CONTAINER=docker
       - uses: actions/upload-artifact@v7
         if: success() && needs.resolve.outputs.publish == 'true'
         with:
@@ -104,12 +67,13 @@ jobs:
       contents: read
       packages: write
     steps:
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
           name: dashboard-image
           path: image
       - name: Load the image
-        run: docker load --input image/dashboard-image.tar
+        run: make image-load CONTAINER=docker
       - uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
@@ -118,12 +82,4 @@ jobs:
       - name: Push the loaded image
         env:
           TAGS: ${{ needs.resolve.outputs.tags }}
-        run: |
-          set -euo pipefail
-          docker image inspect dashboard:ci >/dev/null
-          IFS=',' read -ra tags <<< "$TAGS"
-          test "${#tags[@]}" -gt 0
-          for tag in "${tags[@]}"; do
-            docker tag dashboard:ci "$tag"
-            docker push "$tag"
-          done
+        run: make image-push CONTAINER=docker
