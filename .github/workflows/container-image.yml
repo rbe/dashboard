@@ -25,8 +25,8 @@ jobs:
       image: ${{ steps.version.outputs.image }}
       tags: ${{ steps.version.outputs.tags }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: Resolve image tags from package.json
@@ -40,9 +40,9 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
         with:
           context: .
           file: Containerfile
@@ -87,7 +87,7 @@ jobs:
       - name: Save the loaded image
         if: success() && needs.resolve.outputs.publish == 'true'
         run: docker save dashboard:ci --output dashboard-image.tar
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: success() && needs.resolve.outputs.publish == 'true'
         with:
           name: dashboard-image
@@ -104,13 +104,13 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: dashboard-image
           path: image
       - name: Load the image
         run: docker load --input image/dashboard-image.tar
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
