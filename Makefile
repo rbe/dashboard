@@ -4,7 +4,7 @@
 # They do not install Node or TypeScript on the host.
 #
 # Targets whose descriptions start with "Match CI" are the steps the
-# GitHub workflows run. CI uses Podman too, the same commands as a laptop.
+# GitHub workflows run. Podman is the only container engine.
 #
 # Host checks and the image build run through Podman, so macOS and Linux
 # run the same Linux steps. Node 24 stays in the image.
@@ -50,7 +50,7 @@ help: ## Show this help
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-22s %s\n", $$1, $$2}'
 	@echo
 	@echo "Descriptions that start with \"Match CI\" are the steps the GitHub workflows run."
-	@echo "The container engine is Podman, on a laptop and in CI."
+	@echo "Podman is the only container engine, on a laptop and in CI."
 	@echo "make ci is a branch push: Linux host checks, then one image build and its smoke."
 	@echo "make run is detached and listens on https://127.0.0.1:$(PORT)."
 	@echo "The board file is ./data/dashboard.md (mounted into the container)."

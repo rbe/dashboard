@@ -109,7 +109,10 @@ describe('workflow entry points', () => {
     expect(container.masterOnly).toBe(false)
     expect(container.tags).toBe(true)
     expect(container.workflow_dispatch).toBe(true)
-    expect(read('container.yml')).not.toMatch(/npm ci|npm test|docker\/build-push-action/)
+    expect(read('container.yml')).not.toMatch(/npm ci|npm test/)
+    for (const name of files()) {
+      expect(read(name), name).not.toMatch(/docker/i)
+    }
     expect(jobs(read('container.yml')).image).toContain('packages: write')
     expect(calls(read('ci.yml'))).not.toContain('./.github/workflows/container-image.yml')
     expect(calls(read('release.yml'))).not.toContain('./.github/workflows/container-image.yml')
@@ -220,7 +223,7 @@ describe('Makefile CI targets', () => {
     expect(source).not.toMatch(/docker/i)
     expect(source).not.toContain('CONTAINER')
     expect(targetChunk(source, 'help')).toContain('Match CI')
-    expect(targetChunk(source, 'help')).toContain('The container engine is Podman, on a laptop and in CI.')
+    expect(targetChunk(source, 'help')).toContain('Podman is the only container engine, on a laptop and in CI.')
   })
 
   it('keeps local build and run on Podman without host Node', () => {
