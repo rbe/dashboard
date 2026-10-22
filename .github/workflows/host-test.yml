@@ -22,4 +22,4 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Linux host checks
-        run: make host-checks CONTAINER=docker
+        run: make host-checks

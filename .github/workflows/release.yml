@@ -48,7 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Pack the npm tarball
-        run: make npm-tarball CONTAINER=docker
+        run: make npm-tarball
       - uses: actions/upload-artifact@v7
         with:
           name: npm-tarball
@@ -67,7 +67,7 @@ jobs:
         with:
           path: release
       - name: Write checksums and release notes
-        run: make release-assets CONTAINER=docker
+        run: make release-assets
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}

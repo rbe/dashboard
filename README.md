@@ -59,7 +59,7 @@ make run
 
 Open https://127.0.0.1:4173. `make run` starts the container in the background, and `make stop` stops and removes it. The board file is `data/dashboard.md` in this directory, mounted into the container, and the self-signed certificate is written to `data/tls/` there. `make run PORT=9000` listens on that port.
 
-`make help` lists every target. A description that starts with "Match CI" is a step the GitHub workflows run, so a laptop and CI share one command. The engine defaults to Podman. Linux GitHub jobs pass `CONTAINER=docker`. Docker is not required on a laptop.
+`make help` lists every target. A description that starts with "Match CI" is a step the GitHub workflows run, so a laptop and CI share one command. Podman is the only container engine.
 
 ```sh
 make ci
@@ -69,7 +69,7 @@ make ci
 
 ## GitHub Container Registry
 
-CI, Container, and Release stay separate workflows. The Linux host checks and the image build are reusable workflows, and each event calls each one from a single entry point. Those jobs call the Makefile instead of copying the commands. Triggers, permissions, runner labels, checkout, GHCR login, artifact upload, and `gh release` stay in the workflow files.
+CI, Container, and Release stay separate workflows. The Linux host checks and the image build are reusable workflows, and each event calls each one from a single entry point. Those jobs call the Makefile instead of copying the commands. Triggers, permissions, runner labels, checkout, GHCR login with `podman login`, artifact upload, and `gh release` stay in the workflow files.
 
 On a push to any branch, CI runs the host checks once (`npm ci`, `npm test`, the Linux binary, and a packed CLI smoke). Container builds the image once and smokes that loaded image. These workflows do not also listen for `pull_request`, so a same-repo branch is not tested twice. CI, Container, and Release can each be started by hand with `workflow_dispatch`.
 
