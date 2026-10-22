@@ -1,18 +1,20 @@
-# Image entry point for pull requests, master, tags, and manual runs.
-# Host tests stay on CI (pull requests and master) or Release (tags).
+# Image entry point for every branch push, v* tags, and manual runs.
+# Host tests stay on CI for branches and on Release for tags.
+# No pull_request trigger, so a same-repo branch push builds the image once.
 
 name: Container
 
 on:
-  pull_request:
   push:
-    branches: [master]
-    tags: ['v*.*.*']
+    branches:
+      - '**'
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
 
 concurrency:
   group: container-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'push' && github.ref_type == 'branch' }}
 
 permissions:
   contents: read

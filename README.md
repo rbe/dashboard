@@ -63,9 +63,9 @@ Open https://127.0.0.1:4173. `make run` starts the container in the background, 
 
 CI, Container, and Release stay separate workflows. The Linux host checks and the image build are reusable workflows, and each event calls each one from a single entry point.
 
-On a pull request, CI runs the host checks once (`npm ci`, `npm test`, the Linux binary, and a packed CLI smoke). Container builds the image once, smokes that loaded image, and does not publish.
+On a push to any branch, CI runs the host checks once (`npm ci`, `npm test`, the Linux binary, and a packed CLI smoke). Container builds the image once and smokes that loaded image. These workflows do not also listen for `pull_request`, so a same-repo branch is not tested twice. CI, Container, and Release can each be started by hand with `workflow_dispatch`.
 
-On `master`, CI runs those host checks once. Container builds the image once, smokes it, and pushes that same image as `ghcr.io/rbe/dashboard:edge` and `ghcr.io/rbe/dashboard:sha-<commit>`.
+A push to `master` publishes that same image as `ghcr.io/rbe/dashboard:edge` and `ghcr.io/rbe/dashboard:sha-<commit>`. Any other branch, including `main` if it is added later, is built and smoked and not published.
 
 A tag `vX.Y.Z` that matches `package.json` runs the Linux checks once from Release, then the macOS binary, the npm tarball, and the GitHub release. Container builds the image once and publishes `X.Y.Z`, `X.Y`, `X`, and `latest`. Publishing this package to npm stays off until the repository variable `NPM_PUBLISH` is `true`.
 

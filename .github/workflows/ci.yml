@@ -1,12 +1,18 @@
-# Pull requests and master. Calls the Linux host checks once.
-# Tags are Release's event, so this workflow does not run on v*.
+# Every branch push, and manual runs. Calls the Linux host checks once.
+# There is no pull_request trigger: a same-repo branch push would run this twice.
+# Tags are Release's event, so a v* push does not run CI.
 
 name: CI
 
 on:
   push:
-    branches: [master]
-  pull_request:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' && github.ref_type == 'branch' }}
 
 permissions:
   contents: read

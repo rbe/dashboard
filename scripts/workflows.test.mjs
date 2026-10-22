@@ -31,8 +31,9 @@ function triggers(source) {
     workflow_call: /\bworkflow_call:/.test(on),
     workflow_dispatch: /\bworkflow_dispatch:/.test(on),
     pull_request: /\bpull_request:/.test(on),
-    master: /branches:\s*\[master\]/.test(on),
-    tags: /tags:/.test(on),
+    everyBranch: /branches:[\s\S]*?['"]\*\*['"]/.test(on),
+    masterOnly: /branches:\s*\[master\]/.test(on),
+    tags: /tags:[\s\S]*?['"]v\*\.\*\.\*['"]/.test(on),
   }
 }
 
@@ -69,7 +70,7 @@ describe('workflow entry points', () => {
       const on = triggers(read(name))
       expect(on.workflow_call).toBe(true)
       expect(on.pull_request).toBe(false)
-      expect(on.master).toBe(false)
+      expect(on.everyBranch).toBe(false)
       expect(on.tags).toBe(false)
       expect(on.workflow_dispatch).toBe(false)
     }
@@ -80,16 +81,18 @@ describe('workflow entry points', () => {
     expect(callers).toEqual(['ci.yml', 'release.yml'])
 
     const ci = triggers(read('ci.yml'))
-    expect(ci.pull_request).toBe(true)
-    expect(ci.master).toBe(true)
+    expect(ci.pull_request).toBe(false)
+    expect(ci.everyBranch).toBe(true)
+    expect(ci.masterOnly).toBe(false)
     expect(ci.tags).toBe(false)
-    expect(ci.workflow_dispatch).toBe(false)
+    expect(ci.workflow_dispatch).toBe(true)
 
     const release = triggers(read('release.yml'))
     expect(release.tags).toBe(true)
     expect(release.workflow_dispatch).toBe(true)
     expect(release.pull_request).toBe(false)
-    expect(release.master).toBe(false)
+    expect(release.everyBranch).toBe(false)
+    expect(release.masterOnly).toBe(false)
 
     expect(calls(read('container.yml'))).not.toContain('./.github/workflows/host-test.yml')
     expect(read('ci.yml')).not.toMatch(/npm ci|npm test|npm run package:binary/)
@@ -101,8 +104,9 @@ describe('workflow entry points', () => {
     expect(callers).toEqual(['container.yml'])
 
     const container = triggers(read('container.yml'))
-    expect(container.pull_request).toBe(true)
-    expect(container.master).toBe(true)
+    expect(container.pull_request).toBe(false)
+    expect(container.everyBranch).toBe(true)
+    expect(container.masterOnly).toBe(false)
     expect(container.tags).toBe(true)
     expect(container.workflow_dispatch).toBe(true)
     expect(read('container.yml')).not.toMatch(/npm ci|npm test|docker\/build-push-action/)
