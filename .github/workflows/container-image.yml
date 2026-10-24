@@ -1,4 +1,4 @@
-# Build the dashboard image once, smoke that image, and push it when
+# Build the app image once, smoke that image, and push it when
 # scripts/container-tags.mjs sets publish=true.
 # Called only by the Container workflow.
 # The build, smoke, tag resolution, save, load, and push commands are
@@ -29,9 +29,9 @@ jobs:
       tags: ${{ steps.version.outputs.tags }}
     steps:
       - uses: actions/checkout@v7
-      - name: Resolve image tags
+      - name: Resolve GHCR tags
         id: version
-        run: make image-tags
+        run: make resolve-ghcr-tags
 
   build:
     name: Build
@@ -53,8 +53,8 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: success() && needs.resolve.outputs.publish == 'true'
         with:
-          name: dashboard-image
-          path: dashboard-image.tar
+          name: ${{ github.event.repository.name }}-image
+          path: ${{ github.event.repository.name }}-image.tar
           retention-days: 1
           if-no-files-found: error
 
@@ -70,7 +70,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
-          name: dashboard-image
+          name: ${{ github.event.repository.name }}-image
           path: image
       - name: Load the image
         run: make image-load

@@ -71,7 +71,7 @@ make ci
 
 CI, Container, and Release stay separate workflows. The Linux host checks and the image build are reusable workflows, and each event calls each one from a single entry point. Those jobs call the Makefile instead of copying the commands. Triggers, permissions, runner labels, checkout, GHCR login with `podman login`, artifact upload, and `gh release` stay in the workflow files.
 
-On a push to any branch, CI runs the host checks once (`npm ci`, `npm test`, the Linux binary, and a packed CLI smoke). Container builds the image once and smokes that loaded image. These workflows do not also listen for `pull_request`, so a same-repo branch is not tested twice. CI, Container, and Release can each be started by hand with `workflow_dispatch`.
+On a push to any branch, CI runs the host checks once (`npm ci`, `npm test`, the Linux binary, and a packed CLI smoke). Container resolves the GHCR tags with `make resolve-ghcr-tags`, builds the image once, and smokes that loaded image. These workflows do not also listen for `pull_request`, so a same-repo branch is not tested twice. CI, Container, and Release can each be started by hand with `workflow_dispatch`.
 
 A push to `master` publishes that same image as `ghcr.io/rbe/dashboard:edge` and `ghcr.io/rbe/dashboard:sha-<commit>`. Any other branch, including `main` if it is added later, is built and smoked and not published.
 

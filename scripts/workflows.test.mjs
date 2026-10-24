@@ -112,6 +112,7 @@ describe('workflow entry points', () => {
     expect(read('container.yml')).not.toMatch(/npm ci|npm test/)
     for (const name of files()) {
       expect(read(name), name).not.toMatch(/docker/i)
+      expect(read(name), name).not.toMatch(/\b(dashboard|ernaehrung)\b/)
     }
     expect(jobs(read('container.yml')).image).toContain('packages: write')
     expect(calls(read('ci.yml'))).not.toContain('./.github/workflows/container-image.yml')
@@ -142,10 +143,11 @@ describe('container image workflow', () => {
     expect(source).not.toMatch(/docker/i)
     expect(source).not.toContain('actions/setup-node')
     expect(source).not.toMatch(/npm ci|npm test|npm run build/)
-    expect(source.match(/^\s*run: make image-tags\s*$/m)).toHaveLength(1)
+    expect(source).toContain('github.event.repository.name')
+    expect(source.match(/^\s*run: make resolve-ghcr-tags\s*$/m)).toHaveLength(1)
     expect(source.match(/^\s*run: make ci-image\s*$/m)).toHaveLength(1)
     expect(imageJobs.build.match(/^\s*run: make ci-image\s*$/m)).toHaveLength(1)
-    expect(imageJobs.build).not.toContain('make image-tags')
+    expect(imageJobs.build).not.toContain('make resolve-ghcr-tags')
     expect(imageJobs.build).not.toContain('make image\n')
     expect(imageJobs.build).toContain('Build the image once and smoke it')
     expect(imageJobs.build).toContain("success() && needs.resolve.outputs.publish == 'true'")
@@ -177,6 +179,7 @@ describe('release workflow', () => {
   it('keeps the macOS binary, npm tarball, GitHub release, and optional npm publish', () => {
     expect(source).toContain('NODE_VERSION: "24"')
     expect(source).toContain('runs-on: macos-latest')
+    expect(source).toContain('github.event.repository.name')
     expect(releaseJobs.macos).toContain('actions/setup-node@v7')
     expect(releaseJobs.macos).toContain('make macos-binary')
     expect(releaseJobs.macos).toContain('actions/upload-artifact@v7')
@@ -189,6 +192,8 @@ describe('release workflow', () => {
     expect(releaseJobs.release).toContain('gh release create')
     expect(releaseJobs.release).toContain('gh release upload')
     expect(releaseJobs.release).toContain('contents: write')
+    expect(releaseJobs.release).toContain('build/notes.md')
+    expect(releaseJobs.release).toContain('build/SHA256SUMS')
     expect(releaseJobs['publish-npm']).toContain("vars.NPM_PUBLISH == 'true'")
     expect(releaseJobs['publish-npm']).toContain('actions/setup-node@v7')
     expect(releaseJobs['publish-npm']).toContain('registry-url: https://registry.npmjs.org')
@@ -216,14 +221,28 @@ function targetChunk(source, name) {
 
 describe('Makefile CI targets', () => {
   const source = makefile()
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
 
   it('uses Podman in CI and on a laptop', () => {
     expect(source).toContain('NODE_VERSION ?= 24')
-    expect(source).toContain('CI_IMAGE ?= localhost/dashboard:ci')
+    expect(source).toContain('CI_IMAGE ?= localhost/$(NAME):ci')
+    expect(source).toContain(`NAME ?= ${pkg.name}`)
     expect(source).not.toMatch(/docker/i)
     expect(source).not.toContain('CONTAINER')
     expect(targetChunk(source, 'help')).toContain('Match CI')
     expect(targetChunk(source, 'help')).toContain('Podman is the only container engine, on a laptop and in CI.')
+  })
+
+  it('keeps the product block and uses it', () => {
+    for (const key of ['NAME', 'PORT', 'DEV_PORT', 'DATA_FILE', 'DATA_ENV', 'API_PATH', 'SMOKE_NEEDLE']) {
+      expect(source, key).toMatch(new RegExp(`^${key} \\?= \\S`, 'm'))
+    }
+    expect(targetChunk(source, 'help')).toContain('$(DEV_PORT)')
+    expect(targetChunk(source, 'help')).toContain('$(DATA_FILE)')
+    expect(targetChunk(source, 'run')).toContain('$(DATA_ENV)=/app/$(DATA_FILE)')
+    const smoke = targetChunk(source, 'smoke-image')
+    expect(smoke).toContain('$(API_PATH)')
+    expect(smoke).toContain('$(SMOKE_NEEDLE)')
   })
 
   it('keeps local build and run on Podman without host Node', () => {
@@ -243,7 +262,7 @@ describe('Makefile CI targets', () => {
     expect(targetChunk(source, 'test')).toContain('$(NODE_RUN) npm test')
     expect(targetChunk(source, 'linux-binary')).toContain('$(NODE_RUN) npm run package:binary')
     expect(targetChunk(source, 'smoke-linux-binary')).toContain(
-      '$(NODE_RUN) node scripts/smoke-binary.mjs build/dashboard',
+      '$(NODE_RUN) node scripts/smoke-binary.mjs build/$(NAME)',
     )
     const pack = targetChunk(source, 'pack-smoke')
     expect(pack).toContain('npm pack --ignore-scripts --pack-destination')
@@ -261,8 +280,8 @@ describe('Makefile CI targets', () => {
     expect(targetChunk(source, 'smoke-image')).toContain('id="root"')
     expect(targetChunk(source, 'smoke-image')).toContain('podman run')
     expect(targetChunk(source, 'smoke-image')).not.toContain('podman build')
-    expect(targetChunk(source, 'image-tags')).toContain('node scripts/container-tags.mjs')
-    expect(targetChunk(source, 'image-save')).toContain('podman save -o dashboard-image.tar')
+    expect(targetChunk(source, 'resolve-ghcr-tags')).toContain('node scripts/container-tags.mjs')
+    expect(targetChunk(source, 'image-save')).toContain('podman save -o $(NAME)-image.tar')
     expect(targetChunk(source, 'image-load')).toContain('podman load -i')
     const push = targetChunk(source, 'image-push')
     expect(push).toContain('Refusing to push')
@@ -273,7 +292,7 @@ describe('Makefile CI targets', () => {
     const macos = targetChunk(source, 'macos-binary')
     expect(macos).toContain('Darwin')
     expect(macos).toContain('node scripts/build-binary.mjs --macos')
-    expect(macos).toContain('lipo -archs build/dashboard-macos')
+    expect(macos).toContain('lipo -archs build/$(NAME)-macos')
     expect(macos).not.toContain('NODE_RUN')
     const tarball = targetChunk(source, 'npm-tarball')
     expect(tarball).toContain('npm pack --pack-destination build')
