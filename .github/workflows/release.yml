@@ -38,8 +38,8 @@ jobs:
         run: make macos-binary
       - uses: actions/upload-artifact@v7
         with:
-          name: dashboard-macos
-          path: build/dashboard-macos
+          name: ${{ github.event.repository.name }}-macos
+          path: build/${{ github.event.repository.name }}-macos
           if-no-files-found: error
 
   npm-package:
@@ -52,7 +52,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: npm-tarball
-          path: build/dashboard-*.tgz
+          path: build/${{ github.event.repository.name }}-*.tgz
           if-no-files-found: error
 
   release:
@@ -73,8 +73,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          binary=release/dashboard-macos/dashboard-macos
-          tgz=$(echo release/npm-tarball/dashboard-*.tgz)
+          name="${{ github.event.repository.name }}"
+          binary="release/${name}-macos/${name}-macos"
+          tgz=$(echo release/npm-tarball/${name}-*.tgz)
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" "$binary" "$tgz" build/SHA256SUMS --clobber
           else
