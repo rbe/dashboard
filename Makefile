@@ -162,8 +162,10 @@ smoke-linux-binary: linux-binary ## Smoke the Linux binary
 
 # package:binary already ran npm run build, and prepack would compile again.
 # dist is listed in package.json "files". Pack the dist the build job passed in.
+# "build/name.tgz" is a GitHub shorthand to npm, so install and publish use "./".
+# A leading ./ keeps the tarball a local file. The Node image then needs no git.
 npm-package: deps ## Match CI: pack the npm tarball and smoke the packed CLI
-	$(NODE_RUN) sh -eu -c 'if [ ! -d dist ]; then npm run build; fi; mkdir -p build; npm pack --ignore-scripts --pack-destination build; tgz=$$(echo build/$(NAME)-*.tgz); test -f "$$tgz"; stage=$$(mktemp -d); prefix="$$stage/prefix"; npm install -g "$$tgz" --prefix "$$prefix"; "$$prefix/bin/$(NAME)" --help; node scripts/smoke-binary.mjs "$$prefix/bin/$(NAME)"'
+	$(NODE_RUN) sh -eu -c 'if [ ! -d dist ]; then npm run build; fi; mkdir -p build; npm pack --ignore-scripts --pack-destination build; tgz=$$(echo build/$(NAME)-*.tgz); test -f "$$tgz"; stage=$$(mktemp -d); prefix="$$stage/prefix"; npm install -g "./$$tgz" --prefix "$$prefix"; "$$prefix/bin/$(NAME)" --help; node scripts/smoke-binary.mjs "$$prefix/bin/$(NAME)"'
 
 pack-smoke: npm-package
 npm-tarball: npm-package
@@ -326,7 +328,7 @@ publish-npm: ## Match CI: publish the packed tarball (refuses unless NPM_PUBLISH
 	  tgz=$$(echo build/$(NAME)-*.tgz); \
 	fi; \
 	test -f "$$tgz"; \
-	npm publish "$$tgz" --access public --provenance
+	npm publish "./$$tgz" --access public --provenance
 
 npm-publish: publish-npm
 
