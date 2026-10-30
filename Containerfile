@@ -1,7 +1,7 @@
 # Multi-stage image for the local markdown dashboard.
 # The build stage installs dependencies and compiles the UI.
 # The runtime stage serves that build with the project Node server.
-# NODE_VERSION is the Node major. The Container workflow passes the same value.
+# NODE_VERSION is the Node major. The CI workflow passes the same value.
 
 ARG NODE_VERSION=24
 

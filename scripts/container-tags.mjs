@@ -10,7 +10,7 @@ export function containerfileNodeVersion(source) {
   return match[1]
 }
 
-export function resolveImageTags({ imageName, ref, refName, sha, version }) {
+export function resolveImageTags({ imageName, ref, refName, sha, version, event = '' }) {
   if (!imageName || !imageName.includes('/')) throw new Error('Missing image name')
   const parsed = VERSION.exec(version)
   if (!parsed) throw new Error(`Invalid package.json version: ${version}`)
@@ -34,6 +34,16 @@ export function resolveImageTags({ imageName, ref, refName, sha, version }) {
       ...base,
       publish: true,
       tags: [`${image}:edge`, `${image}:sha-${sha.slice(0, 12)}`],
+    }
+  }
+
+  // A manual run of publish-container is allowed to push from any branch.
+  if (event === 'workflow_dispatch') {
+    if (!sha || sha.length < 12) throw new Error('Missing commit SHA')
+    return {
+      ...base,
+      publish: true,
+      tags: [`${image}:sha-${sha.slice(0, 12)}`],
     }
   }
 
@@ -75,10 +85,11 @@ if (isMain) {
       refName: process.env.GITHUB_REF_NAME || '',
       sha: process.env.GITHUB_SHA || '',
       version: readVersion(),
+      event: process.env.GITHUB_EVENT_NAME || '',
     })
     const output = formatGithubOutput(result)
+    process.stdout.write(output)
     if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, output)
-    else process.stdout.write(output)
   } catch (error) {
     console.error(error.message || error)
     process.exit(1)

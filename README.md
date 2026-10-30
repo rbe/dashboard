@@ -30,7 +30,7 @@ Or from a GitHub release tarball:
 npm install -g https://github.com/rbe/dashboard/releases/download/v1.0.0/dashboard-1.0.0.tgz
 ```
 
-`npm install -g dashboard` does not install this project. That name on the public npm registry already belongs to a different package. Publishing this package there is wired up in the release workflow and stays off until the repository variable `NPM_PUBLISH` is `true` and the `NPM_TOKEN` secret is set.
+`npm install -g dashboard` does not install this project. That name on the public npm registry already belongs to a different package. Publishing this package there stays off until the repository variable `NPM_PUBLISH` is `true` and the `NPM_TOKEN` secret is set. A manual run of the `publish-npm` job may publish without that variable.
 
 ## Run from a checkout
 
@@ -53,35 +53,34 @@ dashboard --port 4173 --file data/dashboard.md
 Podman and make are enough to build and run the app. Node.js and TypeScript are not required on the host; the image installs them and compiles the UI.
 
 ```sh
-make build
 make run
 ```
 
-Open https://127.0.0.1:4173. `make run` starts the container in the background, and `make stop` stops and removes it. The board file is `data/dashboard.md` in this directory, mounted into the container, and the self-signed certificate is written to `data/tls/` there. `make run PORT=9000` listens on that port.
+Open https://127.0.0.1:4173. `make run` builds the image, starts the container in the background, and `make stop` stops and removes it. The board file is `data/dashboard.md` in this directory, mounted into the container, and the self-signed certificate is written to `data/tls/` there. `make run PORT=9000` listens on that port.
 
-`make help` lists every target. A description that starts with "Match CI" is a step the GitHub workflows run, so a laptop and CI share one command. Podman is the only container engine.
+`make help` lists every target. A description that starts with "Match CI" is a job the GitHub workflow runs, so a laptop and CI share one command. Podman is the only container engine.
 
 ```sh
 make ci
 ```
 
-`make ci` is what a branch push runs: `make host-checks` (`npm ci`, `npm test`, the Linux binary, and the packed CLI smoke) and then `make ci-image` (one image build, then the smoke of that image). Those commands run inside the Node 24 image. `make macos-binary` is the Apple silicon release binary. It runs on macOS and uses Node 24 already on PATH. It does not install Node.
+`make ci` is what a branch push runs: `setup`, `build`, `test`, `npm-package`, and `report`. It does not publish. `make build` is the Linux binary and one container image. Those commands run inside the Node 24 image. `make macos-package` is the Apple silicon binary. It runs on macOS and uses Node 24 already on PATH. It does not install Node.
 
-## GitHub Container Registry
+## GitHub Actions
 
-CI, Container, and Release stay separate workflows. The Linux host checks and the image build are reusable workflows, and each event calls each one from a single entry point. Those jobs call the Makefile instead of copying the commands. Triggers, permissions, runner labels, checkout, GHCR login with `podman login`, artifact upload, and `gh release` stay in the workflow files.
+One workflow, `.github/workflows/ci.yml`. Its jobs are `setup`, `build`, `test`, `npm-package`, `macos-package`, `report`, `publish-npm`, `publish-container`, and `publish-github`. Each job runs the Makefile target with the same name and passes artifacts to the jobs that follow. The workflow calls `make`. It does not call `npm ci`, `npm test`, or `npm pack`.
 
-On a push to any branch, CI runs the host checks once (`npm ci`, `npm test`, the Linux binary, and a packed CLI smoke). Container resolves the GHCR tags with `make resolve-ghcr-tags`, builds the image once, and smokes that loaded image. These workflows do not also listen for `pull_request`, so a same-repo branch is not tested twice. CI, Container, and Release can each be started by hand with `workflow_dispatch`.
+A push to any branch runs through `report` and does not publish. There is no `pull_request` trigger, so a same-repo branch is not tested twice. **Run workflow** starts one selected job on the chosen branch. A manual publish job may push.
 
-A push to `master` publishes that same image as `ghcr.io/rbe/dashboard:edge` and `ghcr.io/rbe/dashboard:sha-<commit>`. Any other branch, including `main` if it is added later, is built and smoked and not published.
+A tag `vX.Y.Z` that matches `package.json` runs the same jobs and then publishes. `publish-container` pushes `ghcr.io/rbe/dashboard` as `X.Y.Z`, `X.Y`, `X`, and `latest`. `publish-github` attaches the macOS binary and the npm tarball. `publish-npm` publishes to the npm registry only when the repository variable `NPM_PUBLISH` is `true`. A manual run of `publish-npm` does not need that variable.
 
-A tag `vX.Y.Z` that matches `package.json` runs the Linux checks once from Release, then the macOS binary, the npm tarball, and the GitHub release. Container builds the image once and publishes `X.Y.Z`, `X.Y`, `X`, and `latest`. Publishing this package to npm stays off until the repository variable `NPM_PUBLISH` is `true`.
+A branch push, including `master`, does not push the image. A manual `publish-container` on `master` pushes `ghcr.io/rbe/dashboard:edge` and `:sha-<commit>`. A manual run on any other branch pushes `:sha-<commit>`. The image name and the package version are set once, as workflow variables.
 
 ```sh
 podman pull ghcr.io/rbe/dashboard:latest
 ```
 
-The published image is `linux/amd64`. Host checks and the image use Node 24. `make build` and `make ci-image` pass that same major into the image. Podman and make do not need Node.js on the host.
+The published image is `linux/amd64`. The workflow and the image use Node 24. `make image` passes that same major into the image. Podman and make do not need Node.js on the host.
 
 ## Package
 
@@ -90,4 +89,4 @@ make test
 make linux-binary
 ```
 
-`make linux-binary` writes the Linux executable CI builds to `build/dashboard`. On macOS, `make macos-binary` writes `build/dashboard-macos` for Apple silicon, using Node 24 already on PATH. Tagging `vX.Y.Z` (matching `package.json`) builds that binary and the npm tarball and attaches both to the GitHub release. The same tag publishes the container image. `make npm-tarball` builds that tarball locally.
+`make linux-binary` writes the Linux executable CI builds to `build/dashboard`. On macOS, `make macos-package` writes `build/dashboard-macos` for Apple silicon, using Node 24 already on PATH. Tagging `vX.Y.Z` (matching `package.json`) builds that binary and the npm tarball and attaches both to the GitHub release. The same tag publishes the container image. `make npm-package` builds that tarball locally.

@@ -2,6 +2,17 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const workflowDir = new URL('../.github/workflows/', import.meta.url)
+const jobNames = [
+  'setup',
+  'build',
+  'test',
+  'npm-package',
+  'macos-package',
+  'report',
+  'publish-npm',
+  'publish-container',
+  'publish-github',
+]
 
 function read(name) {
   return readFileSync(new URL(name, workflowDir), 'utf8')
@@ -37,10 +48,6 @@ function triggers(source) {
   }
 }
 
-function calls(source) {
-  return [...source.matchAll(/^\s*uses:\s*(\.\/\.github\/workflows\/[\w.-]+)/gm)].map((match) => match[1])
-}
-
 function jobs(source) {
   const lines = block(source, 'jobs').split('\n')
   const chunks = []
@@ -55,151 +62,117 @@ function jobs(source) {
   return Object.fromEntries(chunks.map((chunk) => [chunk[0].trim().replace(/:$/, ''), chunk.join('\n')]))
 }
 
-const entryPoints = ['ci.yml', 'container.yml', 'release.yml']
+function makeCalls(chunk) {
+  return [...chunk.matchAll(/^\s*run: make (\S+)\s*$/gm)].map((match) => match[1])
+}
 
-describe('workflow entry points', () => {
-  it('keeps CI, Container, and Release as the only event entry points', () => {
-    expect(files()).toEqual([
-      'ci.yml',
-      'container-image.yml',
-      'container.yml',
-      'host-test.yml',
-      'release.yml',
-    ])
-    for (const name of ['host-test.yml', 'container-image.yml']) {
-      const on = triggers(read(name))
-      expect(on.workflow_call).toBe(true)
-      expect(on.pull_request).toBe(false)
-      expect(on.everyBranch).toBe(false)
-      expect(on.tags).toBe(false)
-      expect(on.workflow_dispatch).toBe(false)
+describe('workflow', () => {
+  const source = read('ci.yml')
+  const pipeline = jobs(source)
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+
+  it('is the only workflow and does not call another workflow', () => {
+    expect(files()).toEqual(['ci.yml'])
+    const on = triggers(source)
+    expect(on.workflow_call).toBe(false)
+    expect(on.workflow_dispatch).toBe(true)
+    expect(on.pull_request).toBe(false)
+    expect(on.everyBranch).toBe(true)
+    expect(on.masterOnly).toBe(false)
+    expect(on.tags).toBe(true)
+    expect(source).not.toMatch(/uses:\s*\.\/\.github\/workflows\//)
+    expect(source).not.toMatch(/\bhost-checks\b|\bci-image\b|\bnpm-tarball\b|\bmacos-binary\b|\bnpm-publish\b/)
+    expect(source).not.toMatch(/docker/i)
+    expect(source).not.toMatch(/\bnpm ci\b|\bnpm test\b|\bnpm pack\b|\bnpm publish\b/)
+    expect(source).not.toMatch(/\bernaehrung\b/)
+  })
+
+  it('names the jobs in pipeline order and runs that make target once', () => {
+    expect(Object.keys(pipeline)).toEqual(jobNames)
+    const options = [...source.matchAll(/^\s+- ([a-z0-9-]+)\s*$/gm)].map((match) => match[1])
+    expect(options).toEqual(jobNames)
+    for (const name of jobNames) {
+      expect(makeCalls(pipeline[name]), name).toEqual([name])
     }
   })
 
-  it('runs host npm ci and npm test from one caller per event', () => {
-    const callers = entryPoints.filter((name) => calls(read(name)).includes('./.github/workflows/host-test.yml'))
-    expect(callers).toEqual(['ci.yml', 'release.yml'])
-
-    const ci = triggers(read('ci.yml'))
-    expect(ci.pull_request).toBe(false)
-    expect(ci.everyBranch).toBe(true)
-    expect(ci.masterOnly).toBe(false)
-    expect(ci.tags).toBe(false)
-    expect(ci.workflow_dispatch).toBe(true)
-
-    const release = triggers(read('release.yml'))
-    expect(release.tags).toBe(true)
-    expect(release.workflow_dispatch).toBe(true)
-    expect(release.pull_request).toBe(false)
-    expect(release.everyBranch).toBe(false)
-    expect(release.masterOnly).toBe(false)
-
-    expect(calls(read('container.yml'))).not.toContain('./.github/workflows/host-test.yml')
-    expect(read('ci.yml')).not.toMatch(/npm ci|npm test|npm run package:binary/)
-    expect(read('release.yml')).not.toMatch(/npm test|npm run package:binary/)
-  })
-
-  it('builds the container image from the Container workflow only', () => {
-    const callers = entryPoints.filter((name) => calls(read(name)).includes('./.github/workflows/container-image.yml'))
-    expect(callers).toEqual(['container.yml'])
-
-    const container = triggers(read('container.yml'))
-    expect(container.pull_request).toBe(false)
-    expect(container.everyBranch).toBe(true)
-    expect(container.masterOnly).toBe(false)
-    expect(container.tags).toBe(true)
-    expect(container.workflow_dispatch).toBe(true)
-    expect(read('container.yml')).not.toMatch(/npm ci|npm test/)
-    for (const name of files()) {
-      expect(read(name), name).not.toMatch(/docker/i)
-      expect(read(name), name).not.toMatch(/\b(dashboard|ernaehrung)\b/)
-    }
-    expect(jobs(read('container.yml')).image).toContain('packages: write')
-    expect(calls(read('ci.yml'))).not.toContain('./.github/workflows/container-image.yml')
-    expect(calls(read('release.yml'))).not.toContain('./.github/workflows/container-image.yml')
-  })
-})
-
-describe('host test workflow', () => {
-  const source = read('host-test.yml')
-
-  it('runs the Linux host checks once on Node 24 via make', () => {
+  it('keeps the image name and the package version in one place', () => {
+    expect(source.match(/ghcr\.io\/rbe\/dashboard/g)).toEqual(['ghcr.io/rbe/dashboard'])
+    expect(source.match(/^ {2}IMAGE_NAME:/gm)).toHaveLength(1)
+    expect(source.match(/^ {2}VERSION:.*$/gm)).toEqual([`  VERSION: "${pkg.version}"`])
     expect(source).toContain('NODE_VERSION: "24"')
-    expect(source).toContain('runs-on: ubuntu-26.04')
     expect(source).toContain('actions/checkout@v7')
-    expect(source.match(/^\s*run: make host-checks\s*$/m)).toHaveLength(1)
-    expect(source).not.toMatch(/docker/i)
-    expect(source).not.toContain('actions/setup-node')
-    expect(source).not.toMatch(/npm ci|npm test|npm run package:binary|npm pack/)
-  })
-})
-
-describe('container image workflow', () => {
-  const source = read('container-image.yml')
-  const imageJobs = jobs(source)
-
-  it('builds once, smokes that image, and pushes it only when publishing', () => {
-    expect(source).toContain('NODE_VERSION: "24"')
-    expect(source).not.toMatch(/docker/i)
-    expect(source).not.toContain('actions/setup-node')
-    expect(source).not.toMatch(/npm ci|npm test|npm run build/)
-    expect(source).toContain('github.event.repository.name')
-    expect(source.match(/^\s*run: make resolve-ghcr-tags\s*$/m)).toHaveLength(1)
-    expect(source.match(/^\s*run: make ci-image\s*$/m)).toHaveLength(1)
-    expect(imageJobs.build.match(/^\s*run: make ci-image\s*$/m)).toHaveLength(1)
-    expect(imageJobs.build).not.toContain('make resolve-ghcr-tags')
-    expect(imageJobs.build).not.toContain('make image\n')
-    expect(imageJobs.build).toContain('Build the image once and smoke it')
-    expect(imageJobs.build).toContain("success() && needs.resolve.outputs.publish == 'true'")
-    expect(imageJobs.build).toContain('run: make image-save')
-    expect(imageJobs.build).toContain('actions/upload-artifact@v7')
-    expect(imageJobs.publish).toContain("success() && needs.resolve.outputs.publish == 'true'")
-    expect(imageJobs.publish).toContain('actions/download-artifact@v8')
-    expect(imageJobs.publish).toContain('run: make image-load')
-    expect(imageJobs.publish).toContain('podman login')
-    expect(imageJobs.publish).toContain('--password-stdin')
-    expect(imageJobs.publish).toContain('run: make image-push')
-    expect(imageJobs.publish).not.toContain('make ci-image')
+    expect(source).toContain('actions/upload-artifact@v7')
+    expect(source).toContain('actions/download-artifact@v8')
+    expect(source).toContain('actions/setup-node@v7')
+    expect(source).not.toMatch(/actions\/(checkout|upload-artifact|setup-node)@v[0-6]\b/)
+    expect(source).not.toMatch(/actions\/download-artifact@v[0-7]\b/)
   })
 
-  it('grants packages: write only on the publish job', () => {
-    expect(imageJobs.resolve).not.toContain('packages: write')
-    expect(imageJobs.build).not.toContain('packages: write')
-    expect(imageJobs.publish).toContain('packages: write')
-    expect(imageJobs.resolve).toContain('runs-on: ubuntu-26.04')
-    expect(imageJobs.build).toContain('runs-on: ubuntu-26.04')
-    expect(imageJobs.publish).toContain('runs-on: ubuntu-26.04')
+  it('passes artifacts forward and does not rebuild them in a later job', () => {
+    expect(pipeline.setup).toContain('name: node_modules')
+    expect(pipeline.setup).toContain('path: ci-artifacts/node_modules.tar')
+    expect(pipeline.build).toContain('name: node_modules')
+    expect(pipeline.build).toContain('name: dist')
+    expect(pipeline.build).toContain('name: container-image')
+    expect(pipeline.build).toContain('${{ github.event.repository.name }}-image.tar')
+    expect(pipeline.build).not.toContain('make setup')
+    expect(pipeline.test).toContain('name: node_modules')
+    expect(pipeline.test).toContain('name: test-reports')
+    expect(pipeline.test).toContain('build/test-results.json')
+    expect(pipeline.test).toContain('build/coverage')
+    expect(pipeline.test).not.toContain('needs.test.outputs.reports')
+    expect(pipeline.test).toContain('reports: ${{ steps.reports.outputs.reports }}')
+    expect(pipeline['npm-package']).toContain('name: node_modules')
+    expect(pipeline['npm-package']).toContain('name: dist')
+    expect(pipeline['npm-package']).toContain('name: npm-package')
+    expect(pipeline['npm-package']).not.toContain('make build')
+    expect(pipeline.report).toContain('name: test-reports')
+    expect(pipeline.report).toContain("needs.test.outputs.reports == 'true'")
+    expect(pipeline['publish-npm']).toContain('name: npm-package')
+    expect(pipeline['publish-npm']).not.toContain('make npm-package')
+    expect(pipeline['publish-container']).toContain('name: container-image')
+    expect(pipeline['publish-container']).not.toMatch(/make (build|image|ci-image|setup)\b/)
+    expect(pipeline['publish-container']).not.toContain('podman build')
+    expect(pipeline['publish-github']).toContain('name: npm-package')
+    expect(pipeline['publish-github']).toContain('name: ${{ github.event.repository.name }}-macos')
+    expect(pipeline['publish-github']).not.toContain('make macos-package')
+    expect(pipeline['publish-github']).not.toContain('make npm-package')
   })
-})
 
-describe('release workflow', () => {
-  const source = read('release.yml')
-  const releaseJobs = jobs(source)
+  it('publishes only on a tag or a manual run of that job', () => {
+    for (const name of ['publish-npm', 'publish-container', 'publish-github']) {
+      expect(pipeline[name], name).toContain("inputs.job == '" + name + "'")
+      expect(pipeline[name], name).toContain("startsWith(github.ref, 'refs/tags/v')")
+      expect(pipeline[name], name).not.toContain('refs/heads/master')
+    }
+    expect(pipeline['publish-npm']).toContain("vars.NPM_PUBLISH == 'true'")
+    expect(pipeline['publish-npm']).toContain("github.event_name == 'workflow_dispatch' && 'true' || vars.NPM_PUBLISH")
+    expect(pipeline['publish-npm']).toContain('id-token: write')
+    expect(pipeline['publish-npm']).toContain('registry-url: https://registry.npmjs.org')
+    expect(pipeline['publish-container']).toContain("needs.test.result == 'success'")
+    expect(pipeline['publish-container']).toContain('packages: write')
+    expect(pipeline['publish-container']).toContain('podman login')
+    expect(pipeline['publish-container']).toContain('--password-stdin')
+    expect(pipeline['publish-container']).toContain('${IMAGE_NAME%%/*}')
+    expect(pipeline['publish-github']).toContain('contents: write')
+    expect(pipeline['publish-github']).toContain('gh release create')
+    expect(pipeline['publish-github']).toContain('gh release upload')
+    expect(pipeline['publish-github']).toContain('build/notes.md')
+    expect(pipeline['publish-github']).toContain('build/SHA256SUMS')
+    expect(pipeline['publish-github']).toContain("github.event_name == 'workflow_dispatch' && 'macos-latest' || 'ubuntu-26.04'")
+    expect(source.match(/packages: write/g)).toHaveLength(1)
+    expect(source.match(/id-token: write/g)).toHaveLength(1)
+    expect(source.match(/contents: write/g)).toHaveLength(1)
+  })
 
-  it('keeps the macOS binary, npm tarball, GitHub release, and optional npm publish', () => {
-    expect(source).toContain('NODE_VERSION: "24"')
-    expect(source).toContain('runs-on: macos-latest')
-    expect(source).toContain('github.event.repository.name')
-    expect(releaseJobs.macos).toContain('actions/setup-node@v7')
-    expect(releaseJobs.macos).toContain('make macos-binary')
-    expect(releaseJobs.macos).toContain('actions/upload-artifact@v7')
-    expect(releaseJobs['npm-package']).toContain('runs-on: ubuntu-26.04')
-    expect(releaseJobs['npm-package']).toContain('run: make npm-tarball')
-    expect(releaseJobs['npm-package']).not.toMatch(/docker/i)
-    expect(releaseJobs.release).toContain("startsWith(github.ref, 'refs/tags/v')")
-    expect(releaseJobs.release).toContain('run: make release-assets')
-    expect(releaseJobs.release).toContain('actions/download-artifact@v8')
-    expect(releaseJobs.release).toContain('gh release create')
-    expect(releaseJobs.release).toContain('gh release upload')
-    expect(releaseJobs.release).toContain('contents: write')
-    expect(releaseJobs.release).toContain('build/notes.md')
-    expect(releaseJobs.release).toContain('build/SHA256SUMS')
-    expect(releaseJobs['publish-npm']).toContain("vars.NPM_PUBLISH == 'true'")
-    expect(releaseJobs['publish-npm']).toContain('actions/setup-node@v7')
-    expect(releaseJobs['publish-npm']).toContain('registry-url: https://registry.npmjs.org')
-    expect(releaseJobs['publish-npm']).toContain('id-token: write')
-    expect(releaseJobs['publish-npm']).toContain('make npm-publish')
-    expect(source).not.toMatch(/\bnpm ci\b|\bnpm test\b|\bnpm pack\b|\bnpm publish\b|\bsha256sum\b|\bbuild-binary\b/)
+  it('runs macOS only for the macOS package and keeps Linux on ubuntu-26.04', () => {
+    expect(pipeline['macos-package']).toContain('runs-on: macos-latest')
+    expect(pipeline['macos-package']).toContain('actions/setup-node@v7')
+    expect(pipeline['macos-package']).not.toMatch(/docker|podman/i)
+    for (const name of ['setup', 'build', 'test', 'npm-package', 'report', 'publish-npm', 'publish-container']) {
+      expect(pipeline[name], name).toContain('runs-on: ubuntu-26.04')
+    }
   })
 })
 
@@ -246,28 +219,35 @@ describe('Makefile CI targets', () => {
   })
 
   it('keeps local build and run on Podman without host Node', () => {
-    expect(targetChunk(source, 'build')).toContain('podman build')
-    expect(targetChunk(source, 'build')).not.toContain('npm')
+    expect(targetChunk(source, 'image')).toContain('podman build')
+    expect(targetChunk(source, 'image')).not.toContain('npm')
     expect(targetChunk(source, 'run')).toContain('podman run')
     expect(targetChunk(source, 'run')).not.toContain('npm')
-    expect(source).toContain('ci: host-checks ci-image')
+    expect(source).toContain('ci: setup build test npm-package report')
+    expect(source).not.toContain('ci: host-checks')
   })
 
-  it('runs the Linux host checks in one Node image', () => {
-    expect(source).toContain(
-      'host-checks: check-tag npm-ci test linux-binary smoke-linux-binary pack-smoke',
-    )
+  it('splits the old host checks across the job targets', () => {
+    expect(source).toContain('setup: check-tag npm-ci audit')
+    expect(targetChunk(source, 'audit')).toContain('npm audit --audit-level=high || echo "npm audit reported advisories; continuing"')
     expect(targetChunk(source, 'check-tag')).toContain('refs/tags/v')
     expect(targetChunk(source, 'npm-ci')).toContain('$(NODE_RUN) npm ci')
-    expect(targetChunk(source, 'test')).toContain('$(NODE_RUN) npm test')
+    expect(targetChunk(source, 'test')).toContain('npm test -- --coverage')
+    expect(targetChunk(source, 'test')).toContain('build/test-results.json')
+    expect(targetChunk(source, 'build')).toContain('linux-binary')
+    expect(targetChunk(source, 'build')).toContain('smoke-image')
+    expect(targetChunk(source, 'build')).toContain('image-save')
+    expect(targetChunk(source, 'build')).not.toContain('npm ci')
     expect(targetChunk(source, 'linux-binary')).toContain('$(NODE_RUN) npm run package:binary')
     expect(targetChunk(source, 'smoke-linux-binary')).toContain(
       '$(NODE_RUN) node scripts/smoke-binary.mjs build/$(NAME)',
     )
-    const pack = targetChunk(source, 'pack-smoke')
-    expect(pack).toContain('npm pack --ignore-scripts --pack-destination')
+    const pack = targetChunk(source, 'npm-package')
+    expect(pack).toContain('npm pack --ignore-scripts --pack-destination build')
     expect(pack).toContain('node scripts/smoke-binary.mjs')
     expect(source.match(/\$\(NODE_RUN\) npm ci/g)).toHaveLength(1)
+    expect(targetChunk(source, 'deps')).toContain('ci-artifacts/node_modules.tar')
+    expect(targetChunk(source, 'report')).toContain('No coverage report or test output. Skipping.')
   })
 
   it('builds the CI image once and smokes that image', () => {
@@ -276,6 +256,7 @@ describe('Makefile CI targets', () => {
     const image = targetChunk(source, 'image')
     expect(image).toContain('podman build')
     expect(image).toContain('-t "$(CI_IMAGE)"')
+    expect(image).toContain('-t "$(IMAGE)"')
     expect(image).not.toMatch(/\bpush\b/)
     expect(targetChunk(source, 'smoke-image')).toContain('id="root"')
     expect(targetChunk(source, 'smoke-image')).toContain('podman run')
@@ -286,21 +267,26 @@ describe('Makefile CI targets', () => {
     const push = targetChunk(source, 'image-push')
     expect(push).toContain('Refusing to push')
     expect(push).toContain('podman push')
+    const publish = targetChunk(source, 'publish-container')
+    expect(publish).toContain('image-load')
+    expect(publish).toContain('resolve-ghcr-tags')
+    expect(publish).toContain('image-push')
+    expect(publish).not.toContain('podman build')
   })
 
   it('keeps release commands that can run locally, and gates publish', () => {
-    const macos = targetChunk(source, 'macos-binary')
+    const macos = targetChunk(source, 'macos-package')
     expect(macos).toContain('Darwin')
     expect(macos).toContain('node scripts/build-binary.mjs --macos')
     expect(macos).toContain('lipo -archs build/$(NAME)-macos')
     expect(macos).not.toContain('NODE_RUN')
-    const tarball = targetChunk(source, 'npm-tarball')
-    expect(tarball).toContain('npm pack --pack-destination build')
-    expect(tarball).not.toContain('ignore-scripts')
-    expect(targetChunk(source, 'release-assets')).toContain('node scripts/release-notes.mjs')
-    expect(targetChunk(source, 'release-assets')).toContain('SHA256SUMS')
-    const publish = targetChunk(source, 'npm-publish')
+    const tarball = targetChunk(source, 'npm-package')
+    expect(tarball).toContain('npm pack --ignore-scripts --pack-destination build')
+    expect(targetChunk(source, 'publish-github')).toContain('node scripts/release-notes.mjs')
+    expect(targetChunk(source, 'publish-github')).toContain('SHA256SUMS')
+    const publish = targetChunk(source, 'publish-npm')
     expect(publish).toContain('NPM_PUBLISH')
-    expect(publish).toContain('npm publish --access public --provenance')
+    expect(publish).toContain('npm publish "$$tgz" --access public --provenance')
+    expect(publish).not.toContain('npm ci')
   })
 })
