@@ -271,7 +271,7 @@ describe('Makefile CI targets', () => {
     const pack = targetChunk(source, 'npm-package')
     expect(pack).toContain('npm pack --ignore-scripts --pack-destination build')
     expect(pack).toContain('npm install -g "./$$tgz"')
-    expect(pack).toContain('dist/index.html')
+    expect(pack).toContain('grep -qx package/dist/index.html')
     expect(pack).not.toContain('npm run build')
     expect(pack).toContain('node scripts/smoke-binary.mjs')
     expect(source.match(/\$\(NODE_RUN\) npm ci/g)).toHaveLength(1)
@@ -368,6 +368,5 @@ describe('package and image contents', () => {
       expect(file.endsWith('.test.mjs'), file).toBe(false)
     }
     expect(paths).toContain('bin/dashboard.mjs')
-    expect(paths).toContain('dist/index.html')
   })
 })

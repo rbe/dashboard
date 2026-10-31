@@ -163,7 +163,7 @@ smoke-linux-binary: linux-binary ## Smoke the Linux binary
 # "build/name.tgz" is a GitHub shorthand to npm, so install and publish use "./".
 # A leading ./ keeps the tarball a local file. The Node image then needs no git.
 npm-package: deps ## Match CI: pack the npm tarball and smoke the packed CLI
-	$(NODE_RUN) sh -eu -c 'if [ ! -f dist/index.html ]; then echo "npm-package needs dist from the build job. It does not compile the UI again."; exit 1; fi; mkdir -p build; npm pack --ignore-scripts --pack-destination build; tgz=$$(echo build/$(NAME)-*.tgz); test -f "$$tgz"; stage=$$(mktemp -d); prefix="$$stage/prefix"; npm install -g "./$$tgz" --prefix "$$prefix"; "$$prefix/bin/$(NAME)" --help; node scripts/smoke-binary.mjs "$$prefix/bin/$(NAME)"'
+	$(NODE_RUN) sh -eu -c 'if [ ! -f dist/index.html ]; then echo "npm-package needs dist from the build job. It does not compile the UI again."; exit 1; fi; mkdir -p build; npm pack --ignore-scripts --pack-destination build; tgz=$$(echo build/$(NAME)-*.tgz); test -f "$$tgz"; list=$$(mktemp); tar -tzf "$$tgz" > "$$list"; if ! grep -qx package/dist/index.html "$$list"; then echo "The packed app is missing dist/index.html."; exit 1; fi; rm -f "$$list"; stage=$$(mktemp -d); prefix="$$stage/prefix"; npm install -g "./$$tgz" --prefix "$$prefix"; "$$prefix/bin/$(NAME)" --help; node scripts/smoke-binary.mjs "$$prefix/bin/$(NAME)"'
 
 pack-smoke: npm-package
 npm-tarball: npm-package
