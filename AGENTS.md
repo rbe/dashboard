@@ -13,7 +13,7 @@ The Makefile is the interface. A laptop and CI run the same targets. Podman is t
 | Data env | `DASHBOARD_FILE` |
 | API | `/api/dashboard` |
 | Smoke needle | `not for git` |
-| Linux binary | `build/dashboard` |
+| Image | `ghcr.io/rbe/dashboard` |
 
 `NAME` in the Makefile is the npm package name and the GitHub repository name. Do not commit `data/`.
 
@@ -23,7 +23,7 @@ The Makefile is the interface. A laptop and CI run the same targets. Podman is t
 - `make run` and `make stop` are the Podman HTTPS server. `make image` builds that image.
 - `make ci` is a branch push: `setup`, `build`, `test`, `npm-package`, `report`, and `docs`. It does not publish.
 - `make setup` installs dependencies, checks a `v*` tag, and runs `npm audit` as a warning.
-- `make build` is the Linux binary and one container image.
+- `make build` builds the container image and saves it for `publish-container`. The same target smokes a Linux binary at `build/dashboard`. The GitHub release attaches the npm tarball.
 - `make test` writes a coverage report and test output.
 - `make npm-package` packs the built app from `dist` into `build/` and smokes the packed CLI. It does not compile the UI again. It runs only after `build` and `test` succeed.
 - `make docs` renders `docs/` to HTML in `build/docs`. It skips when `docs/` has no pages. That HTML is not part of the npm package or the image.
