@@ -1,4 +1,6 @@
+import { execFileSync } from 'node:child_process'
 import { readFileSync, readdirSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 const workflowDir = new URL('../.github/workflows/', import.meta.url)
@@ -8,6 +10,7 @@ const jobNames = [
   'test',
   'npm-package',
   'report',
+  'docs',
   'publish-npm',
   'publish-container',
   'publish-github',
@@ -123,8 +126,9 @@ describe('workflow', () => {
     expect(pipeline.test).toContain('build/coverage')
     expect(pipeline.test).not.toContain('needs.test.outputs.reports')
     expect(pipeline.test).toContain('reports: ${{ steps.reports.outputs.reports }}')
-    expect(pipeline['npm-package']).toContain('needs: build')
-    expect(pipeline['npm-package']).not.toContain('needs: test')
+    expect(pipeline['npm-package']).toContain('needs: [build, test]')
+    expect(pipeline['npm-package']).toContain("needs.build.result == 'success'")
+    expect(pipeline['npm-package']).toContain("needs.test.result == 'success'")
     expect(pipeline['npm-package']).toContain('name: node_modules')
     expect(pipeline['npm-package']).toContain('name: dist')
     expect(pipeline['npm-package']).toContain('name: npm-package')
@@ -145,6 +149,13 @@ describe('workflow', () => {
     expect(pipeline['publish-github']).not.toContain('make npm-package')
     expect(pipeline['publish-github']).not.toContain('publish-npm')
     expect(pipeline['publish-github']).not.toContain('publish-container')
+    expect(pipeline['publish-github']).not.toContain('name: docs')
+    expect(pipeline.docs).toContain('name: docs')
+    expect(pipeline.docs).toContain('path: build/docs')
+    expect(pipeline.docs).toContain('if-no-files-found: ignore')
+    expect(pipeline.docs).not.toContain('needs:')
+    expect(pipeline['npm-package']).not.toContain('name: docs')
+    expect(pipeline['publish-container']).not.toContain('name: docs')
   })
 
   it('publishes only on a tag or a manual run of that job', () => {
@@ -177,7 +188,7 @@ describe('workflow', () => {
     expect(pipeline.build).toContain('needs: setup')
     expect(pipeline.test).toContain('needs: setup')
     expect(pipeline.test).not.toContain('needs: build')
-    expect(pipeline.test).not.toContain("inputs.job == 'publish-github'")
+    expect(pipeline.test).toContain("inputs.job == 'publish-github'")
     expect(pipeline.build).toContain("inputs.job == 'publish-github'")
     expect(pipeline.setup).toContain("inputs.job == 'publish-github'")
     expect(pipeline['npm-package']).toContain("inputs.job == 'publish-github'")
@@ -238,7 +249,7 @@ describe('Makefile CI targets', () => {
     expect(targetChunk(source, 'image')).not.toContain('npm')
     expect(targetChunk(source, 'run')).toContain('podman run')
     expect(targetChunk(source, 'run')).not.toContain('npm')
-    expect(source).toContain('ci: setup build test npm-package report')
+    expect(source).toContain('ci: setup build test npm-package report docs')
     expect(source).not.toContain('ci: host-checks')
   })
 
@@ -266,6 +277,7 @@ describe('Makefile CI targets', () => {
     expect(source.match(/\$\(NODE_RUN\) npm ci/g)).toHaveLength(1)
     expect(targetChunk(source, 'deps')).toContain('ci-artifacts/node_modules.tar')
     expect(targetChunk(source, 'report')).toContain('No coverage report or test output. Skipping.')
+    expect(targetChunk(source, 'docs')).toContain('node scripts/render-docs.mjs')
   })
 
   it('builds the CI image once and smokes that image', () => {
@@ -309,5 +321,53 @@ describe('Makefile CI targets', () => {
     expect(publish).toContain('npm publish "./$$tgz" --access public --provenance')
     expect(publish).not.toContain('npm ci')
     expect(publish).not.toContain('$(MAKE) npm-package')
+  })
+})
+
+describe('package and image contents', () => {
+  const root = fileURLToPath(new URL('../', import.meta.url))
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+  const npmignore = readFileSync(new URL('../.npmignore', import.meta.url), 'utf8')
+  const containerignore = readFileSync(new URL('../.containerignore', import.meta.url), 'utf8')
+  const containerfile = readFileSync(new URL('../Containerfile', import.meta.url), 'utf8')
+  const keptOut = ['.claude/', 'AGENTS.md', 'CLAUDE.md', 'docs/', '.github/', 'data/dashboard.md', 'data/tls']
+
+  it('keeps instruction and private files out of the tarball and the image', () => {
+    for (const entry of keptOut) {
+      expect(npmignore, entry).toContain(entry.replace(/\/$/, ''))
+      expect(containerignore, entry).toContain(entry.replace(/\/$/, ''))
+    }
+    expect(pkg.files).toEqual([
+      'bin/dashboard.mjs',
+      'scripts/cli.mjs',
+      'scripts/server.mjs',
+      'scripts/dashboard-api.mjs',
+      'scripts/tls-cert.mjs',
+      'dist',
+      'data/dashboard.example.md',
+    ])
+    expect(containerfile).not.toMatch(/AGENTS\.md|\.claude|^COPY docs|docs\//m)
+  })
+
+  it('packs only the built app', () => {
+    const raw = execFileSync('npm', ['pack', '--dry-run', '--ignore-scripts', '--json'], {
+      cwd: root,
+      encoding: 'utf8',
+    })
+    const packed = JSON.parse(raw)
+    const paths = packed[0].files.map((file) => file.path)
+    const allowed = new Set(pkg.files.filter((entry) => entry !== 'dist'))
+    for (const file of paths) {
+      const built = file.startsWith('dist/') || file === 'dist'
+      const listed = allowed.has(file) || file === 'package.json' || file === 'README.md'
+      expect(built || listed, file).toBe(true)
+      expect(file.startsWith('docs/'), file).toBe(false)
+      expect(file.startsWith('.claude/'), file).toBe(false)
+      expect(file).not.toBe('AGENTS.md')
+      expect(file.startsWith('src/'), file).toBe(false)
+      expect(file.endsWith('.test.mjs'), file).toBe(false)
+    }
+    expect(paths).toContain('bin/dashboard.mjs')
+    expect(paths).toContain('dist/index.html')
   })
 })

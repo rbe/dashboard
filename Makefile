@@ -51,7 +51,7 @@ NODE_RUN_OPTS = --rm -e HOME=/tmp -e npm_config_cache=/tmp/npm-cache -e npm_conf
 NODE_RUN = podman run $(NODE_RUN_OPTS) $(NODE_IMAGE)
 
 .DEFAULT_GOAL := help
-.PHONY: help image run stop ci host-checks setup deps check-tag npm-ci audit build test linux-binary smoke-linux-binary npm-package pack-smoke npm-tarball report resolve-ghcr-tags ci-image smoke-image image-save image-load image-push publish-container publish-npm npm-publish publish-github release-assets
+.PHONY: help image run stop ci host-checks setup deps check-tag npm-ci audit build test linux-binary smoke-linux-binary npm-package pack-smoke npm-tarball report docs resolve-ghcr-tags ci-image smoke-image image-save image-load image-push publish-container publish-npm npm-publish publish-github release-assets
 
 help: ## Show this help
 	@echo "Host requirements for image, run, and stop: Podman and make."
@@ -63,7 +63,7 @@ help: ## Show this help
 	@echo
 	@echo "Descriptions that start with \"Match CI\" are the jobs the GitHub workflow runs."
 	@echo "Podman is the only container engine, on a laptop and in CI."
-	@echo "make ci is a branch push: setup, build, test, npm-package, and report. It does not publish."
+	@echo "make ci is a branch push: setup, build, test, npm-package, report, and docs. It does not publish."
 	@echo "make run builds the image if needed and listens on https://127.0.0.1:$(PORT)."
 	@echo "The data file is ./$(DATA_FILE) (mounted into the container)."
 	@echo "The self-signed certificate is ./data/tls/cert.pem."
@@ -95,7 +95,7 @@ stop: ## Stop and remove the detached container
 	@podman rm -f $(NAME) >/dev/null 2>&1 || true
 	@echo "Stopped $(NAME)"
 
-ci: setup build test npm-package report ## Match CI: branch push through report, no publish
+ci: setup build test npm-package report docs ## Match CI: branch push through report and docs, no publish
 	@echo "Branch pipeline finished. Nothing was published."
 
 # Local Linux checks. The workflow does not call this target.
@@ -191,6 +191,9 @@ report: ## Match CI: collect coverage and test output; skip when none exist
 	test -s build/report.md; \
 	if [ -n "$${GITHUB_STEP_SUMMARY:-}" ]; then cat build/report.md >> "$$GITHUB_STEP_SUMMARY"; fi; \
 	echo "Wrote build/report.md"
+
+docs: ## Match CI: render docs/ to HTML; skip when none exist
+	$(NODE_RUN) node scripts/render-docs.mjs
 
 resolve-ghcr-tags: ## Resolve GHCR tags from the git ref
 	@set -euo pipefail; \

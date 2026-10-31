@@ -5,8 +5,9 @@
 # publish-github also runs the jobs that produce the tarball, and that
 # manual publish may push.
 # build and test both need setup, so they run together. npm-package needs
-# the dist artifact build uploaded and does not compile it again. It runs
-# beside test. The publish jobs do not need each other.
+# both, then packs the built app. docs renders docs/ to HTML and runs
+# beside them. That HTML is not in the package or the image.
+# The publish jobs do not need each other.
 # There is no pull_request trigger, so a same-repo branch is not run twice.
 
 name: CI
@@ -29,6 +30,7 @@ on:
           - test
           - npm-package
           - report
+          - docs
           - publish-npm
           - publish-container
           - publish-github
@@ -107,7 +109,12 @@ jobs:
       always() &&
       (
         (github.event_name != 'workflow_dispatch' && needs.setup.result == 'success') ||
-        (github.event_name == 'workflow_dispatch' && inputs.job == 'test')
+        (github.event_name == 'workflow_dispatch' && inputs.job == 'test') ||
+        (
+          github.event_name == 'workflow_dispatch' &&
+          (inputs.job == 'npm-package' || inputs.job == 'publish-npm' || inputs.job == 'publish-github') &&
+          needs.setup.result == 'success'
+        )
       )
     runs-on: ubuntu-26.04
     outputs:
@@ -140,15 +147,20 @@ jobs:
           retention-days: 1
 
   npm-package:
-    needs: build
+    needs: [build, test]
     if: >-
       always() &&
       (
-        (github.event_name != 'workflow_dispatch' && needs.build.result == 'success') ||
+        (
+          github.event_name != 'workflow_dispatch' &&
+          needs.build.result == 'success' &&
+          needs.test.result == 'success'
+        ) ||
         (
           github.event_name == 'workflow_dispatch' &&
           (inputs.job == 'npm-package' || inputs.job == 'publish-npm' || inputs.job == 'publish-github') &&
-          needs.build.result == 'success'
+          needs.build.result == 'success' &&
+          needs.test.result == 'success'
         )
       )
     runs-on: ubuntu-26.04
@@ -189,6 +201,20 @@ jobs:
           path: build
       - name: Collect coverage and test output
         run: make report
+
+  docs:
+    if: github.event_name != 'workflow_dispatch' || inputs.job == 'docs'
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Render docs to HTML
+        run: make docs
+      - uses: actions/upload-artifact@v7
+        with:
+          name: docs
+          path: build/docs
+          if-no-files-found: ignore
+          retention-days: 1
 
   publish-npm:
     needs: [npm-package, test, report]

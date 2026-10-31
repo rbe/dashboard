@@ -62,11 +62,11 @@ Open https://127.0.0.1:4173. `make run` builds the image, starts the container i
 make ci
 ```
 
-`make ci` is what a branch push runs: `setup`, `build`, `test`, `npm-package`, and `report`. It does not publish. `make build` is the Linux binary and one container image. Those commands run inside the Node 24 image. `make npm-package` packs the `dist` tree from that build. It does not compile the UI again.
+`make ci` is what a branch push runs: `setup`, `build`, `test`, `npm-package`, `report`, and `docs`. It does not publish. `make build` is the Linux binary and one container image. Those commands run inside the Node 24 image. `make npm-package` packs the built app from `dist`. It does not compile the UI again. `make docs` renders `docs/` to HTML.
 
 ## GitHub Actions
 
-One workflow, `.github/workflows/ci.yml`. Its jobs are `setup`, `build`, `test`, `npm-package`, `report`, `publish-npm`, `publish-container`, and `publish-github`. Each job runs the Makefile target with the same name and passes artifacts to the jobs that follow. `build` and `test` both need `setup`, so they run together. `npm-package` downloads the `dist` artifact `build` uploaded and runs beside `test`. The three publish jobs do not wait on each other. The workflow calls `make`. It does not call `npm ci`, `npm test`, or `npm pack`.
+One workflow, `.github/workflows/ci.yml`. Its jobs are `setup`, `build`, `test`, `npm-package`, `report`, `docs`, `publish-npm`, `publish-container`, and `publish-github`. Each job runs the Makefile target with the same name and passes artifacts to the jobs that follow. `build` and `test` both need `setup`, so they run together. `npm-package` needs both and downloads the `dist` artifact `build` uploaded. `docs` renders `docs/` to HTML. That HTML is a separate artifact, not part of the npm package or the image. The three publish jobs do not wait on each other. The workflow calls `make`. It does not call `npm ci`, `npm test`, or `npm pack`.
 
 A push to any branch runs through `report` and does not publish. There is no `pull_request` trigger, so a same-repo branch is not tested twice. **Run workflow** starts one selected job on the chosen branch. A manual `publish-npm` or `publish-github` also runs the jobs that produce the tarball. A manual publish job may push.
 
