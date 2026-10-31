@@ -14,34 +14,38 @@ The Makefile is the interface. A laptop and CI run the same targets. Podman is t
 | API | `/api/dashboard` |
 | Smoke needle | `not for git` |
 | Linux binary | `build/dashboard` |
-| macOS binary | `build/dashboard-macos` |
 
 `NAME` in the Makefile is the npm package name and the GitHub repository name. Do not commit `data/`.
 
 ## Commands
 
 - `npm start` is the Vite dev server.
-- `make run` and `make stop` are the Podman HTTPS server. `make build` builds that image.
-- `make host-checks` is the Linux CI check: `npm ci`, `npm test`, the Linux binary, and the packed CLI smoke. It runs inside `podman run node:24-bookworm-slim`.
-- `make ci` is a branch push: `make host-checks`, then `make ci-image`.
-- `make resolve-ghcr-tags` resolves the GHCR tags from the git ref.
-- `make npm-tarball` packs the npm tarball into `build/`.
-- `make macos-binary` builds the Apple silicon binary. It runs on macOS only and uses Node 24 already on PATH.
-- `make npm-publish` publishes to npm and refuses unless `NPM_PUBLISH=true`.
-- `make help` lists every target. A description that starts with "Match CI" is a step the GitHub workflows run.
+- `make run` and `make stop` are the Podman HTTPS server. `make image` builds that image.
+- `make ci` is a branch push: `setup`, `build`, `test`, `npm-package`, `report`, and `docs`. It does not publish.
+- `make setup` installs dependencies, checks a `v*` tag, and runs `npm audit` as a warning.
+- `make build` is the Linux binary and one container image.
+- `make test` writes a coverage report and test output.
+- `make npm-package` packs the built app from `dist` into `build/` and smokes the packed CLI. It does not compile the UI again. It runs only after `build` and `test` succeed.
+- `make docs` renders `docs/` to HTML in `build/docs`. It skips when `docs/` has no pages. That HTML is not part of the npm package or the image.
+- `make publish-npm` publishes the packed tarball and refuses unless `NPM_PUBLISH=true`.
+- `make publish-container` pushes the image saved by `build`.
+- `make publish-github` writes the checksums and release notes.
+- `make help` lists every target. A description that starts with "Match CI" is a job the GitHub workflow runs.
 
 ## Node and containers
 
-Node 24. Host checks run inside the Node 24 image, so the host does not need Node. `make macos-binary` and `make npm-publish` are the exceptions: codesign and npm provenance need the host. Do not add Docker or a second image build.
+Node 24. Linux jobs run inside the Node 24 image, so the host does not need Node. `make publish-npm` is the exception: npm provenance needs the host. Do not add Docker or a second image build.
 
 ## Workflows
 
-YAML calls `make`. It does not call `npm ci`, `npm test`, or `npm pack`.
+YAML calls `make`. It does not call `npm ci`, `npm test`, or `npm pack`. One workflow file, `.github/workflows/ci.yml`. Its jobs, in order, are `setup`, `build`, `test`, `npm-package`, `report`, `docs`, `publish-npm`, `publish-container`, and `publish-github`. A job calls the Makefile target with the same name. The workflow does not call `host-checks`.
 
-`host-test.yml` is called only from CI and Release. `container-image.yml` is called only from Container. One event runs the host checks once.
+`build` and `test` both need `setup` and run together. `npm-package` needs `build` and `test`, downloads the `dist` artifact `build` uploaded, and packs that app. `report` needs `test`. `docs` has no `needs` and renders `docs/` to HTML. `.npmignore` and `.containerignore` keep `.claude/`, `AGENTS.md`, `docs/`, and other instruction or private files out of the tarball and the image. `publish-npm`, `publish-container`, and `publish-github` do not need each other. `publish-github` needs `npm-package` and downloads that tarball. A manual `publish-github` still runs `setup`, `build`, `test`, and `npm-package`.
 
-CI listens for every branch push and `workflow_dispatch`, not `pull_request`. Release listens for `v*.*.*` tags. Container listens for every branch push, those tags, and `workflow_dispatch`. A same-repo pull request is not tested twice. Fork pull requests do not run CI.
+A branch push runs through `report` and does not publish. A `v*.*.*` tag then runs the publish jobs. `workflow_dispatch` runs one selected job on the chosen branch, including a publish job, and that manual publish may push. A manual `publish-npm` or `publish-github` also runs the jobs that produce the tarball. There is no `pull_request` trigger, so a same-repo branch is not tested twice. Fork pull requests do not run CI.
 
-Image push happens only when `scripts/container-tags.mjs` sets `publish=true`. npm publish stays off unless the repository variable `NPM_PUBLISH` is `true`. GHCR login and `gh release` stay in the workflow files.
+`publish-container` pushes `ghcr.io/rbe/dashboard`. The image name and the package version are workflow-level variables. A branch push, including `master`, does not push the image. A manual `publish-container` on `master` pushes `:edge` and `:sha-<commit>`. A manual run on any other branch pushes `:sha-<commit>`. A `v*` tag pushes the version tags.
+
+`publish-npm` stays off unless the repository variable `NPM_PUBLISH` is `true`, except a manual run of that job. `npm audit` is a warning, not a failure. GHCR login and `gh release` stay in the workflow file. Jobs pass artifacts forward and do not repeat an earlier job's work.
 
 `scripts/workflows.test.mjs` locks this contract. Do not weaken those assertions to make a one-off change pass.

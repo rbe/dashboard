@@ -1,6 +1,14 @@
-# Every branch push, and manual runs. Calls the Linux host checks once.
-# There is no pull_request trigger: a same-repo branch push would run this twice.
-# Tags are Release's event, so a v* push does not run CI.
+# One pipeline. A branch push runs through report and does not publish.
+# A v* tag continues into the publish jobs. publish-npm also needs the
+# repository variable NPM_PUBLISH=true, except a manual run.
+# workflow_dispatch runs the one selected job. A manual publish-npm or
+# publish-github also runs the jobs that produce the tarball, and that
+# manual publish may push.
+# build and test both need setup, so they run together. npm-package needs
+# both, then packs the built app. docs renders docs/ to HTML and runs
+# beside them. That HTML is not in the package or the image.
+# The publish jobs do not need each other.
+# There is no pull_request trigger, so a same-repo branch is not run twice.
 
 name: CI
 
@@ -8,7 +16,24 @@ on:
   push:
     branches:
       - '**'
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
+    inputs:
+      job:
+        description: Job to run
+        required: true
+        type: choice
+        options:
+          - setup
+          - build
+          - test
+          - npm-package
+          - report
+          - docs
+          - publish-npm
+          - publish-container
+          - publish-github
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -17,8 +42,293 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  IMAGE_NAME: ghcr.io/rbe/dashboard
+  VERSION: "1.0.0"
+  NODE_VERSION: "24"
+
 jobs:
+  setup:
+    if: >-
+      github.event_name != 'workflow_dispatch' ||
+      inputs.job == 'setup' ||
+      inputs.job == 'npm-package' ||
+      inputs.job == 'publish-npm' ||
+      inputs.job == 'publish-github'
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install, audit, and check the version
+        run: make setup
+      - uses: actions/upload-artifact@v7
+        with:
+          name: node_modules
+          path: ci-artifacts/node_modules.tar
+          if-no-files-found: error
+          retention-days: 1
+
+  build:
+    needs: setup
+    if: >-
+      always() &&
+      (
+        (github.event_name != 'workflow_dispatch' && needs.setup.result == 'success') ||
+        (github.event_name == 'workflow_dispatch' && inputs.job == 'build') ||
+        (
+          github.event_name == 'workflow_dispatch' &&
+          (inputs.job == 'npm-package' || inputs.job == 'publish-npm' || inputs.job == 'publish-github') &&
+          needs.setup.result == 'success'
+        )
+      )
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: node_modules
+          path: ci-artifacts
+      - name: Build the Linux binary and the container image
+        run: make build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist
+          if-no-files-found: error
+          retention-days: 1
+      - uses: actions/upload-artifact@v7
+        with:
+          name: container-image
+          path: ${{ github.event.repository.name }}-image.tar
+          if-no-files-found: error
+          retention-days: 1
+
   test:
+    needs: setup
+    if: >-
+      always() &&
+      (
+        (github.event_name != 'workflow_dispatch' && needs.setup.result == 'success') ||
+        (github.event_name == 'workflow_dispatch' && inputs.job == 'test') ||
+        (
+          github.event_name == 'workflow_dispatch' &&
+          (inputs.job == 'npm-package' || inputs.job == 'publish-npm' || inputs.job == 'publish-github') &&
+          needs.setup.result == 'success'
+        )
+      )
+    runs-on: ubuntu-26.04
+    outputs:
+      reports: ${{ steps.reports.outputs.reports }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: node_modules
+          path: ci-artifacts
+      - name: Test
+        run: make test
+      - id: reports
+        if: always()
+        run: |
+          if [ -f build/test-results.json ] || [ -d build/coverage ]; then
+            echo "reports=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "reports=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-reports
+          path: |
+            build/test-results.json
+            build/coverage
+          if-no-files-found: ignore
+          retention-days: 1
+
+  npm-package:
+    needs: [build, test]
+    if: >-
+      always() &&
+      (
+        (
+          github.event_name != 'workflow_dispatch' &&
+          needs.build.result == 'success' &&
+          needs.test.result == 'success'
+        ) ||
+        (
+          github.event_name == 'workflow_dispatch' &&
+          (inputs.job == 'npm-package' || inputs.job == 'publish-npm' || inputs.job == 'publish-github') &&
+          needs.build.result == 'success' &&
+          needs.test.result == 'success'
+        )
+      )
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: node_modules
+          path: ci-artifacts
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist
+      - name: Pack the npm tarball
+        run: make npm-package
+      - uses: actions/upload-artifact@v7
+        with:
+          name: npm-package
+          path: build/*.tgz
+          if-no-files-found: error
+          retention-days: 1
+
+  report:
+    needs: test
+    if: >-
+      always() &&
+      needs.test.outputs.reports == 'true' &&
+      (
+        github.event_name != 'workflow_dispatch' ||
+        inputs.job == 'report'
+      )
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: test-reports
+          path: build
+      - name: Collect coverage and test output
+        run: make report
+
+  docs:
+    if: github.event_name != 'workflow_dispatch' || inputs.job == 'docs'
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Render docs to HTML
+        run: make docs
+      - uses: actions/upload-artifact@v7
+        with:
+          name: docs
+          path: build/docs
+          if-no-files-found: ignore
+          retention-days: 1
+
+  publish-npm:
+    needs: [npm-package, test, report]
+    if: >-
+      always() &&
+      (
+        (
+          github.event_name == 'workflow_dispatch' &&
+          inputs.job == 'publish-npm' &&
+          needs.npm-package.result == 'success'
+        ) ||
+        (
+          github.event_name == 'push' &&
+          startsWith(github.ref, 'refs/tags/v') &&
+          vars.NPM_PUBLISH == 'true' &&
+          needs.npm-package.result == 'success' &&
+          needs.test.result == 'success' &&
+          (needs.report.result == 'success' || needs.report.result == 'skipped')
+        )
+      )
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
-    uses: ./.github/workflows/host-test.yml
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: npm-package
+          path: build
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - name: Publish the npm package
+        run: make publish-npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_PUBLISH: ${{ github.event_name == 'workflow_dispatch' && 'true' || vars.NPM_PUBLISH }}
+
+  publish-container:
+    needs: [build, test, report]
+    if: >-
+      always() &&
+      (
+        (github.event_name == 'workflow_dispatch' && inputs.job == 'publish-container') ||
+        (
+          github.event_name == 'push' &&
+          startsWith(github.ref, 'refs/tags/v') &&
+          needs.build.result == 'success' &&
+          needs.test.result == 'success' &&
+          (needs.report.result == 'success' || needs.report.result == 'skipped')
+        )
+      )
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: container-image
+          path: image
+      - name: Log in to GHCR
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s\n' "$GHCR_TOKEN" | podman login "${IMAGE_NAME%%/*}" --username "$REGISTRY_USER" --password-stdin
+      - name: Push the image
+        run: make publish-container
+
+  publish-github:
+    needs: [npm-package, test, report]
+    if: >-
+      always() &&
+      (
+        (
+          github.event_name == 'workflow_dispatch' &&
+          inputs.job == 'publish-github' &&
+          needs.npm-package.result == 'success'
+        ) ||
+        (
+          github.event_name == 'push' &&
+          startsWith(github.ref, 'refs/tags/v') &&
+          needs.npm-package.result == 'success' &&
+          needs.test.result == 'success' &&
+          (needs.report.result == 'success' || needs.report.result == 'skipped')
+        )
+      )
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: npm-package
+          path: release/npm-package
+      - name: Write checksums and release notes
+        run: make publish-github
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          name="${{ github.event.repository.name }}"
+          tgz=$(echo release/npm-package/${name}-*.tgz)
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$tgz" build/SHA256SUMS --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$tgz" build/SHA256SUMS \
+              --title "$GITHUB_REF_NAME" \
+              --notes-file build/notes.md
+          fi

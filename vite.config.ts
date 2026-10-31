@@ -30,5 +30,12 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts', 'scripts/**/*.test.mjs'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'lcov'],
+      reportsDirectory: 'build/coverage',
+      include: ['src/**', 'scripts/**'],
+      exclude: ['**/*.test.*'],
+    },
   },
 })

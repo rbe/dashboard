@@ -10,22 +10,6 @@ if (!tgz || !repo || !tag) {
 
 process.stdout.write(`# ${tag}
 
-## macOS binary
-
-\`dashboard-macos\` is one Apple silicon binary. Node.js is not required.
-
-\`\`\`sh
-chmod +x dashboard-macos
-xattr -d com.apple.quarantine dashboard-macos
-./dashboard-macos
-\`\`\`
-
-Then open https://127.0.0.1:4173
-
-The certificate is self-signed. The first launch writes it to data/tls/cert.pem.
-
-The binary is ad-hoc signed. The first launch may still need approval in System Settings → Privacy & Security.
-
 ## Container
 
 The image is \`${image}\` (linux/amd64).
@@ -33,6 +17,8 @@ The image is \`${image}\` (linux/amd64).
 \`\`\`sh
 podman pull ${image}
 \`\`\`
+
+Open https://127.0.0.1:4173. The certificate is self-signed. The first launch writes it to data/tls/cert.pem.
 
 ## npm
 

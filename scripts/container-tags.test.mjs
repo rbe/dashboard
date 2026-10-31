@@ -49,6 +49,35 @@ describe('container image tags', () => {
     ])
   })
 
+  it('publishes a commit tag from a manual run of another branch', () => {
+    const result = resolveImageTags({
+      imageName: 'ghcr.io/rbe/dashboard',
+      ref: 'refs/heads/feature/pipeline',
+      refName: 'feature/pipeline',
+      sha,
+      version: '1.0.0',
+      event: 'workflow_dispatch',
+    })
+    expect(result.publish).toBe(true)
+    expect(result.tags).toEqual(['ghcr.io/rbe/dashboard:sha-0123456789ab'])
+  })
+
+  it('keeps the master edge tags when a manual run is on master', () => {
+    const result = resolveImageTags({
+      imageName: 'ghcr.io/rbe/dashboard',
+      ref: 'refs/heads/master',
+      refName: 'master',
+      sha,
+      version: '1.0.0',
+      event: 'workflow_dispatch',
+    })
+    expect(result.publish).toBe(true)
+    expect(result.tags).toEqual([
+      'ghcr.io/rbe/dashboard:edge',
+      'ghcr.io/rbe/dashboard:sha-0123456789ab',
+    ])
+  })
+
   it('does not publish pull requests', () => {
     const result = resolveImageTags({
       imageName: 'ghcr.io/rbe/dashboard',

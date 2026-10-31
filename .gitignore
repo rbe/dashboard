@@ -1,6 +1,8 @@
 node_modules
 dist
 build
+ci-artifacts
+release
 .DS_Store
 *.local
 dashboard-image.tar
