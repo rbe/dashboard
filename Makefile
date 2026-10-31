@@ -9,8 +9,6 @@
 #
 # setup, build, and test run through Podman, so macOS and Linux run the
 # same Linux steps. Node 24 stays in the image.
-# macos-package is the release job that codesigns on macOS. It uses Node 24
-# already on PATH and does not install Node.
 # publish-npm runs on the host because npm provenance uses the runner token.
 
 SHELL := /bin/bash
@@ -53,7 +51,7 @@ NODE_RUN_OPTS = --rm -e HOME=/tmp -e npm_config_cache=/tmp/npm-cache -e npm_conf
 NODE_RUN = podman run $(NODE_RUN_OPTS) $(NODE_IMAGE)
 
 .DEFAULT_GOAL := help
-.PHONY: help image run stop ci host-checks setup deps check-tag npm-ci audit build test linux-binary smoke-linux-binary npm-package pack-smoke npm-tarball macos-package macos-binary report resolve-ghcr-tags ci-image smoke-image image-save image-load image-push publish-container publish-npm npm-publish publish-github release-assets
+.PHONY: help image run stop ci host-checks setup deps check-tag npm-ci audit build test linux-binary smoke-linux-binary npm-package pack-smoke npm-tarball report resolve-ghcr-tags ci-image smoke-image image-save image-load image-push publish-container publish-npm npm-publish publish-github release-assets
 
 help: ## Show this help
 	@echo "Host requirements for image, run, and stop: Podman and make."
@@ -160,41 +158,15 @@ linux-binary: deps ## Build the Linux binary
 smoke-linux-binary: linux-binary ## Smoke the Linux binary
 	$(NODE_RUN) node scripts/smoke-binary.mjs build/$(NAME)
 
-# package:binary already ran npm run build, and prepack would compile again.
-# dist is listed in package.json "files". Pack the dist the build job passed in.
+# The build job uploads dist. Pack that tree. prepack would compile again,
+# and a later job must not run npm run build.
 # "build/name.tgz" is a GitHub shorthand to npm, so install and publish use "./".
 # A leading ./ keeps the tarball a local file. The Node image then needs no git.
 npm-package: deps ## Match CI: pack the npm tarball and smoke the packed CLI
-	$(NODE_RUN) sh -eu -c 'if [ ! -d dist ]; then npm run build; fi; mkdir -p build; npm pack --ignore-scripts --pack-destination build; tgz=$$(echo build/$(NAME)-*.tgz); test -f "$$tgz"; stage=$$(mktemp -d); prefix="$$stage/prefix"; npm install -g "./$$tgz" --prefix "$$prefix"; "$$prefix/bin/$(NAME)" --help; node scripts/smoke-binary.mjs "$$prefix/bin/$(NAME)"'
+	$(NODE_RUN) sh -eu -c 'if [ ! -f dist/index.html ]; then echo "npm-package needs dist from the build job. It does not compile the UI again."; exit 1; fi; mkdir -p build; npm pack --ignore-scripts --pack-destination build; tgz=$$(echo build/$(NAME)-*.tgz); test -f "$$tgz"; stage=$$(mktemp -d); prefix="$$stage/prefix"; npm install -g "./$$tgz" --prefix "$$prefix"; "$$prefix/bin/$(NAME)" --help; node scripts/smoke-binary.mjs "$$prefix/bin/$(NAME)"'
 
 pack-smoke: npm-package
 npm-tarball: npm-package
-
-macos-package: ## Match CI: Apple silicon binary (macOS only; Node 24 on PATH)
-	@set -euo pipefail; \
-	if [ "$$(uname -s)" != "Darwin" ]; then \
-	  echo "macos-package matches the macOS job and runs on macOS."; \
-	  exit 1; \
-	fi; \
-	if ! command -v npm >/dev/null || ! command -v node >/dev/null; then \
-	  echo "macos-package uses Node 24 already on PATH. It does not install Node."; \
-	  exit 1; \
-	fi; \
-	major=$$(node -p 'process.versions.node.split(".")[0]'); \
-	if [ "$$major" -lt 24 ]; then \
-	  echo "macos-package matches CI and needs Node 24 on PATH. It does not install Node."; \
-	  exit 1; \
-	fi; \
-	npm ci; \
-	npm run build; \
-	node scripts/build-binary.mjs --macos; \
-	archs=$$(lipo -archs build/$(NAME)-macos); \
-	echo "$$archs"; \
-	test "$$archs" = "arm64"; \
-	file build/$(NAME)-macos; \
-	node scripts/smoke-binary.mjs build/$(NAME)-macos
-
-macos-binary: macos-package
 
 report: ## Match CI: collect coverage and test output; skip when none exist
 	@set -euo pipefail; \
@@ -320,28 +292,16 @@ publish-npm: ## Match CI: publish the packed tarball (refuses unless NPM_PUBLISH
 	fi; \
 	tgz=$$(echo build/$(NAME)-*.tgz); \
 	if [ ! -f "$$tgz" ]; then \
-	  if [ "$${GITHUB_EVENT_NAME:-}" != "workflow_dispatch" ]; then \
-	    echo "Missing npm tarball. npm-package produces it."; \
-	    exit 1; \
-	  fi; \
-	  $(MAKE) npm-package; \
-	  tgz=$$(echo build/$(NAME)-*.tgz); \
+	  echo "Missing npm tarball. npm-package produces it."; \
+	  exit 1; \
 	fi; \
-	test -f "$$tgz"; \
 	npm publish "./$$tgz" --access public --provenance
 
 npm-publish: publish-npm
 
 publish-github: ## Match CI: checksums and release notes for the GitHub release
 	@set -euo pipefail; \
-	mkdir -p "$(RELEASE_DIR)/$(NAME)-macos" "$(RELEASE_DIR)/npm-package" build; \
-	binary="$(RELEASE_DIR)/$(NAME)-macos/$(NAME)-macos"; \
-	if [ ! -f "$$binary" ] && [ -f "build/$(NAME)-macos" ]; then \
-	  cp "build/$(NAME)-macos" "$$binary"; \
-	fi; \
-	if [ ! -f "$$binary" ] && [ -f "$(RELEASE_DIR)/$(NAME)-macos/build/$(NAME)-macos" ]; then \
-	  cp "$(RELEASE_DIR)/$(NAME)-macos/build/$(NAME)-macos" "$$binary"; \
-	fi; \
+	mkdir -p "$(RELEASE_DIR)/npm-package" build; \
 	tgz=""; \
 	for candidate in \
 	  "$(RELEASE_DIR)"/npm-package/$(NAME)-*.tgz \
@@ -350,33 +310,17 @@ publish-github: ## Match CI: checksums and release notes for the GitHub release
 	do \
 	  if [ -f "$$candidate" ]; then tgz="$$candidate"; break; fi; \
 	done; \
-	if [ -n "$$tgz" ]; then \
-	  canon="$(RELEASE_DIR)/npm-package/$$(basename "$$tgz")"; \
-	  if [ "$$tgz" != "$$canon" ]; then cp "$$tgz" "$$canon"; fi; \
-	  tgz="$$canon"; \
+	if [ -z "$$tgz" ]; then \
+	  echo "publish-github needs the npm-package tarball. It does not pack again."; \
+	  exit 1; \
 	fi; \
-	if [ ! -f "$$binary" ] || [ -z "$$tgz" ] || [ ! -f "$$tgz" ]; then \
-	  if [ "$${GITHUB_EVENT_NAME:-}" != "workflow_dispatch" ] || [ "$$(uname -s)" != "Darwin" ]; then \
-	    echo "publish-github needs the macos-package binary and the npm-package tarball."; \
-	    exit 1; \
-	  fi; \
-	  if [ ! -f "$$binary" ]; then \
-	    $(MAKE) macos-package; \
-	    cp "build/$(NAME)-macos" "$$binary"; \
-	  fi; \
-	  if [ -z "$$tgz" ] || [ ! -f "$$tgz" ]; then \
-	    npm pack --ignore-scripts --pack-destination "$(RELEASE_DIR)/npm-package"; \
-	    tgz=$$(echo "$(RELEASE_DIR)"/npm-package/$(NAME)-*.tgz); \
-	  fi; \
-	fi; \
-	test -f "$$binary"; \
+	canon="$(RELEASE_DIR)/npm-package/$$(basename "$$tgz")"; \
+	if [ "$$tgz" != "$$canon" ]; then cp "$$tgz" "$$canon"; fi; \
+	tgz="$$canon"; \
 	test -f "$$tgz"; \
 	tgz_name=$$(basename "$$tgz"); \
 	sum() { $(SHA256) "$$1" | awk '{print $$1}'; }; \
-	{ \
-	  printf '%s  %s\n' "$$(sum "$$binary")" $(NAME)-macos; \
-	  printf '%s  %s\n' "$$(sum "$$tgz")" "$$tgz_name"; \
-	} > build/SHA256SUMS; \
+	printf '%s  %s\n' "$$(sum "$$tgz")" "$$tgz_name" > build/SHA256SUMS; \
 	if [ "$$(uname -s)" = "Darwin" ]; then \
 	  TGZ_NAME="$$tgz_name" node scripts/release-notes.mjs > build/notes.md; \
 	else \

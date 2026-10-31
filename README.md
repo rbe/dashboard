@@ -4,17 +4,15 @@ Local markdown dashboard for systems and links. The board is stored in a file on
 
 ## Install
 
-### macOS binary
+The running app is the container image. A GitHub release attaches the npm tarball.
 
-GitHub Releases include `dashboard-macos`, one Apple silicon binary. Node.js is not required.
+### Container
 
 ```sh
-chmod +x dashboard-macos
-xattr -d com.apple.quarantine dashboard-macos
-./dashboard-macos
+podman pull ghcr.io/rbe/dashboard:latest
 ```
 
-Open https://127.0.0.1:4173. The binary is ad-hoc signed, so the first launch may need approval in System Settings → Privacy & Security. The server certificate is self-signed. The first launch writes it to `data/tls/cert.pem`, and the browser asks before trusting it.
+The image is `linux/amd64`. `make run` builds it locally and listens on https://127.0.0.1:4173. The certificate is self-signed. The first launch writes it to `data/tls/cert.pem`, and the browser asks before trusting it.
 
 ### npm
 
@@ -64,15 +62,15 @@ Open https://127.0.0.1:4173. `make run` builds the image, starts the container i
 make ci
 ```
 
-`make ci` is what a branch push runs: `setup`, `build`, `test`, `npm-package`, and `report`. It does not publish. `make build` is the Linux binary and one container image. Those commands run inside the Node 24 image. `make macos-package` is the Apple silicon binary. It runs on macOS and uses Node 24 already on PATH. It does not install Node.
+`make ci` is what a branch push runs: `setup`, `build`, `test`, `npm-package`, and `report`. It does not publish. `make build` is the Linux binary and one container image. Those commands run inside the Node 24 image. `make npm-package` packs the `dist` tree from that build. It does not compile the UI again.
 
 ## GitHub Actions
 
-One workflow, `.github/workflows/ci.yml`. Its jobs are `setup`, `build`, `test`, `npm-package`, `macos-package`, `report`, `publish-npm`, `publish-container`, and `publish-github`. Each job runs the Makefile target with the same name and passes artifacts to the jobs that follow. The workflow calls `make`. It does not call `npm ci`, `npm test`, or `npm pack`.
+One workflow, `.github/workflows/ci.yml`. Its jobs are `setup`, `build`, `test`, `npm-package`, `report`, `publish-npm`, `publish-container`, and `publish-github`. Each job runs the Makefile target with the same name and passes artifacts to the jobs that follow. `build` and `test` both need `setup`, so they run together. `npm-package` downloads the `dist` artifact `build` uploaded and runs beside `test`. The three publish jobs do not wait on each other. The workflow calls `make`. It does not call `npm ci`, `npm test`, or `npm pack`.
 
-A push to any branch runs through `report` and does not publish. There is no `pull_request` trigger, so a same-repo branch is not tested twice. **Run workflow** starts one selected job on the chosen branch. A manual publish job may push.
+A push to any branch runs through `report` and does not publish. There is no `pull_request` trigger, so a same-repo branch is not tested twice. **Run workflow** starts one selected job on the chosen branch. A manual `publish-npm` or `publish-github` also runs the jobs that produce the tarball. A manual publish job may push.
 
-A tag `vX.Y.Z` that matches `package.json` runs the same jobs and then publishes. `publish-container` pushes `ghcr.io/rbe/dashboard` as `X.Y.Z`, `X.Y`, `X`, and `latest`. `publish-github` attaches the macOS binary and the npm tarball. `publish-npm` publishes to the npm registry only when the repository variable `NPM_PUBLISH` is `true`. A manual run of `publish-npm` does not need that variable.
+A tag `vX.Y.Z` that matches `package.json` runs the same jobs and then publishes. `publish-container` pushes `ghcr.io/rbe/dashboard` as `X.Y.Z`, `X.Y`, `X`, and `latest`. `publish-github` needs `npm-package` and attaches that tarball. `publish-npm` publishes to the npm registry only when the repository variable `NPM_PUBLISH` is `true`. A manual run of `publish-npm` does not need that variable.
 
 A branch push, including `master`, does not push the image. A manual `publish-container` on `master` pushes `ghcr.io/rbe/dashboard:edge` and `:sha-<commit>`. A manual run on any other branch pushes `:sha-<commit>`. The image name and the package version are set once, as workflow variables.
 
@@ -89,4 +87,4 @@ make test
 make linux-binary
 ```
 
-`make linux-binary` writes the Linux executable CI builds to `build/dashboard`. On macOS, `make macos-package` writes `build/dashboard-macos` for Apple silicon, using Node 24 already on PATH. Tagging `vX.Y.Z` (matching `package.json`) builds that binary and the npm tarball and attaches both to the GitHub release. The same tag publishes the container image. `make npm-package` builds that tarball locally.
+`make linux-binary` writes the Linux executable CI builds to `build/dashboard`. Tagging `vX.Y.Z` (matching `package.json`) attaches the npm tarball to the GitHub release and publishes the container image. `make npm-package` packs the tarball from `dist`. Run `make build` first so that directory exists.

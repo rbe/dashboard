@@ -7,7 +7,6 @@ const jobNames = [
   'build',
   'test',
   'npm-package',
-  'macos-package',
   'report',
   'publish-npm',
   'publish-container',
@@ -81,7 +80,8 @@ describe('workflow', () => {
     expect(on.masterOnly).toBe(false)
     expect(on.tags).toBe(true)
     expect(source).not.toMatch(/uses:\s*\.\/\.github\/workflows\//)
-    expect(source).not.toMatch(/\bhost-checks\b|\bci-image\b|\bnpm-tarball\b|\bmacos-binary\b|\bnpm-publish\b/)
+    expect(source).not.toMatch(/\bhost-checks\b|\bci-image\b|\bnpm-tarball\b|\bmacos-binary\b|\bmacos-package\b|\bnpm-publish\b/)
+    expect(source).not.toContain('macos-latest')
     expect(source).not.toMatch(/docker/i)
     expect(source).not.toMatch(/\bnpm ci\b|\bnpm test\b|\bnpm pack\b|\bnpm publish\b/)
     expect(source).not.toMatch(/\bernaehrung\b/)
@@ -123,10 +123,15 @@ describe('workflow', () => {
     expect(pipeline.test).toContain('build/coverage')
     expect(pipeline.test).not.toContain('needs.test.outputs.reports')
     expect(pipeline.test).toContain('reports: ${{ steps.reports.outputs.reports }}')
+    expect(pipeline['npm-package']).toContain('needs: build')
+    expect(pipeline['npm-package']).not.toContain('needs: test')
     expect(pipeline['npm-package']).toContain('name: node_modules')
     expect(pipeline['npm-package']).toContain('name: dist')
     expect(pipeline['npm-package']).toContain('name: npm-package')
     expect(pipeline['npm-package']).not.toContain('make build')
+    expect(pipeline['npm-package']).not.toContain('continue-on-error')
+    expect(pipeline.report).toContain('needs: test')
+    expect(pipeline.report).not.toContain('macos-package')
     expect(pipeline.report).toContain('name: test-reports')
     expect(pipeline.report).toContain("needs.test.outputs.reports == 'true'")
     expect(pipeline['publish-npm']).toContain('name: npm-package')
@@ -134,10 +139,12 @@ describe('workflow', () => {
     expect(pipeline['publish-container']).toContain('name: container-image')
     expect(pipeline['publish-container']).not.toMatch(/make (build|image|ci-image|setup)\b/)
     expect(pipeline['publish-container']).not.toContain('podman build')
+    expect(pipeline['publish-github']).toContain('needs: [npm-package, test, report]')
     expect(pipeline['publish-github']).toContain('name: npm-package')
-    expect(pipeline['publish-github']).toContain('name: ${{ github.event.repository.name }}-macos')
-    expect(pipeline['publish-github']).not.toContain('make macos-package')
+    expect(pipeline['publish-github']).toContain("needs.npm-package.result == 'success'")
     expect(pipeline['publish-github']).not.toContain('make npm-package')
+    expect(pipeline['publish-github']).not.toContain('publish-npm')
+    expect(pipeline['publish-github']).not.toContain('publish-container')
   })
 
   it('publishes only on a tag or a manual run of that job', () => {
@@ -160,17 +167,25 @@ describe('workflow', () => {
     expect(pipeline['publish-github']).toContain('gh release upload')
     expect(pipeline['publish-github']).toContain('build/notes.md')
     expect(pipeline['publish-github']).toContain('build/SHA256SUMS')
-    expect(pipeline['publish-github']).toContain("github.event_name == 'workflow_dispatch' && 'macos-latest' || 'ubuntu-26.04'")
+    expect(pipeline['publish-github']).not.toContain('dashboard-macos')
     expect(source.match(/packages: write/g)).toHaveLength(1)
     expect(source.match(/id-token: write/g)).toHaveLength(1)
     expect(source.match(/contents: write/g)).toHaveLength(1)
   })
 
-  it('runs macOS only for the macOS package and keeps Linux on ubuntu-26.04', () => {
-    expect(pipeline['macos-package']).toContain('runs-on: macos-latest')
-    expect(pipeline['macos-package']).toContain('actions/setup-node@v7')
-    expect(pipeline['macos-package']).not.toMatch(/docker|podman/i)
-    for (const name of ['setup', 'build', 'test', 'npm-package', 'report', 'publish-npm', 'publish-container']) {
+  it('runs build beside test, and a manual publish-github runs the pack', () => {
+    expect(pipeline.build).toContain('needs: setup')
+    expect(pipeline.test).toContain('needs: setup')
+    expect(pipeline.test).not.toContain('needs: build')
+    expect(pipeline.test).not.toContain("inputs.job == 'publish-github'")
+    expect(pipeline.build).toContain("inputs.job == 'publish-github'")
+    expect(pipeline.setup).toContain("inputs.job == 'publish-github'")
+    expect(pipeline['npm-package']).toContain("inputs.job == 'publish-github'")
+    expect(pipeline['publish-npm']).toContain('needs: [npm-package, test, report]')
+    expect(pipeline['publish-container']).toContain('needs: [build, test, report]')
+    expect(pipeline['publish-npm']).not.toContain('publish-container')
+    expect(pipeline['publish-container']).not.toContain('publish-github')
+    for (const name of jobNames) {
       expect(pipeline[name], name).toContain('runs-on: ubuntu-26.04')
     }
   })
@@ -245,6 +260,8 @@ describe('Makefile CI targets', () => {
     const pack = targetChunk(source, 'npm-package')
     expect(pack).toContain('npm pack --ignore-scripts --pack-destination build')
     expect(pack).toContain('npm install -g "./$$tgz"')
+    expect(pack).toContain('dist/index.html')
+    expect(pack).not.toContain('npm run build')
     expect(pack).toContain('node scripts/smoke-binary.mjs')
     expect(source.match(/\$\(NODE_RUN\) npm ci/g)).toHaveLength(1)
     expect(targetChunk(source, 'deps')).toContain('ci-artifacts/node_modules.tar')
@@ -276,18 +293,21 @@ describe('Makefile CI targets', () => {
   })
 
   it('keeps release commands that can run locally, and gates publish', () => {
-    const macos = targetChunk(source, 'macos-package')
-    expect(macos).toContain('Darwin')
-    expect(macos).toContain('node scripts/build-binary.mjs --macos')
-    expect(macos).toContain('lipo -archs build/$(NAME)-macos')
-    expect(macos).not.toContain('NODE_RUN')
+    expect(source).not.toMatch(/^macos-package:/m)
+    expect(source).not.toMatch(/^macos-binary:/m)
     const tarball = targetChunk(source, 'npm-package')
     expect(tarball).toContain('npm pack --ignore-scripts --pack-destination build')
-    expect(targetChunk(source, 'publish-github')).toContain('node scripts/release-notes.mjs')
-    expect(targetChunk(source, 'publish-github')).toContain('SHA256SUMS')
+    expect(tarball).not.toContain('npm run build')
+    const notes = targetChunk(source, 'publish-github')
+    expect(notes).toContain('node scripts/release-notes.mjs')
+    expect(notes).toContain('SHA256SUMS')
+    expect(notes).toContain('It does not pack again.')
+    expect(notes).not.toContain('npm pack')
+    expect(notes).not.toContain('macos-package')
     const publish = targetChunk(source, 'publish-npm')
     expect(publish).toContain('NPM_PUBLISH')
     expect(publish).toContain('npm publish "./$$tgz" --access public --provenance')
     expect(publish).not.toContain('npm ci')
+    expect(publish).not.toContain('$(MAKE) npm-package')
   })
 })
