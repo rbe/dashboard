@@ -38,6 +38,8 @@ Node 24. Linux jobs run inside the Node 24 image, so the host does not need Node
 
 ## Workflows
 
+Pipeline rules: [docs/pipeline-rules.md](docs/pipeline-rules.md).
+
 YAML calls `make`. It does not call `npm ci`, `npm test`, or `npm pack`. One workflow file, `.github/workflows/ci.yml`. Its jobs, in order, are `setup`, `build`, `test`, `npm-package`, `report`, `docs`, `publish-npm`, `publish-container`, and `publish-github`. A job calls the Makefile target with the same name. The workflow does not call `host-checks`.
 
 `build` and `test` both need `setup` and run together. `npm-package` needs `build` and `test`, downloads the `dist` artifact `build` uploaded, and packs that app. `report` needs `test`. `docs` has no `needs` and renders `docs/` to HTML. `.npmignore` and `.containerignore` keep `.claude/`, `AGENTS.md`, `docs/`, and other instruction or private files out of the tarball and the image. `publish-npm`, `publish-container`, and `publish-github` do not need each other. `publish-github` needs `npm-package` and downloads that tarball. A manual `publish-github` still runs `setup`, `build`, `test`, and `npm-package`.
