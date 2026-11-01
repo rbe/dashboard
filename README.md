@@ -56,35 +56,33 @@ make run
 
 Open https://127.0.0.1:4173. `make run` builds the image, starts the container in the background, and `make stop` stops and removes it. The board file is `data/dashboard.md` in this directory, mounted into the container, and the self-signed certificate is written to `data/tls/` there. `make run PORT=9000` listens on that port.
 
-`make help` lists every target. A description that starts with "Match CI" is a job the GitHub workflow runs, so a laptop and CI share one command. Podman is the only container engine.
+`make help` lists every target. A description that starts with "Match CI" is a job the GitHub workflow runs, so a laptop and CI share one command. Podman is the only container engine. `make ci` runs the branch pipeline on a laptop.
 
-```sh
-make ci
+## Pipeline
+
+Podman and make are enough to set the app up. `make setup` checks that a `v*` tag matches `package.json`, installs dependencies with `npm ci` in the Node 24 image, and runs `npm audit` as a warning. It saves `node_modules` for the jobs that follow. The only workflow is `.github/workflows/ci.yml`. Each job runs the Makefile target with the same name. The image name `ghcr.io/rbe/dashboard` and the package version are workflow variables.
+
+```mermaid
+flowchart LR
+  setup --> build
+  setup --> test
+  build --> npmPackage["npm-package"]
+  test --> npmPackage
+  test --> report
+  docs["docs"]
+  npmPackage --> publishNpm["publish-npm"]
+  test --> publishNpm
+  report --> publishNpm
+  build --> publishContainer["publish-container"]
+  test --> publishContainer
+  report --> publishContainer
+  npmPackage --> publishGithub["publish-github"]
+  test --> publishGithub
+  report --> publishGithub
 ```
 
-`make ci` is what a branch push runs: `setup`, `build`, `test`, `npm-package`, `report`, and `docs`. It does not publish. `make build` is the Linux binary and one container image. Those commands run inside the Node 24 image. `make npm-package` packs the built app from `dist`. It does not compile the UI again. `make docs` renders `docs/` to HTML.
+A line is that job's `needs` entry. `build` and `test` both wait for `setup`, then run together. `npm-package` waits for both and packs the `dist` tree `build` uploaded. `report` waits for `test` and collects coverage and test output when `test` wrote them. `docs` has no `needs`. It renders `docs/` to HTML beside the other jobs, and that HTML stays out of the npm package and the image.
 
-## GitHub Actions
+A branch push runs `setup` through `report`, with `docs` beside that chain. A tag `vX.Y.Z` that matches `package.json` also runs the three publish jobs. They wait only on the jobs drawn above. `publish-container` pushes `ghcr.io/rbe/dashboard` as `X.Y.Z`, `X.Y`, `X`, and `latest`. `publish-github` attaches the tarball from `npm-package`. `publish-npm` publishes that tarball when the repository variable `NPM_PUBLISH` is `true`. A manual run of `publish-npm` may publish without that variable. **Run workflow** starts the one selected job on the chosen branch. A manual `publish-npm` or `publish-github` also runs the jobs that produce the tarball, and that manual publish may push. A manual `publish-container` on `master` pushes `:edge` and `:sha-<commit>`. A manual run on any other branch pushes `:sha-<commit>`.
 
-One workflow, `.github/workflows/ci.yml`. Its jobs are `setup`, `build`, `test`, `npm-package`, `report`, `docs`, `publish-npm`, `publish-container`, and `publish-github`. Each job runs the Makefile target with the same name and passes artifacts to the jobs that follow. `build` and `test` both need `setup`, so they run together. `npm-package` needs both and downloads the `dist` artifact `build` uploaded. `docs` renders `docs/` to HTML. That HTML is a separate artifact, not part of the npm package or the image. The three publish jobs do not wait on each other. The workflow calls `make`. It does not call `npm ci`, `npm test`, or `npm pack`.
-
-A push to any branch runs through `report` and does not publish. There is no `pull_request` trigger, so a same-repo branch is not tested twice. **Run workflow** starts one selected job on the chosen branch. A manual `publish-npm` or `publish-github` also runs the jobs that produce the tarball. A manual publish job may push.
-
-A tag `vX.Y.Z` that matches `package.json` runs the same jobs and then publishes. `publish-container` pushes `ghcr.io/rbe/dashboard` as `X.Y.Z`, `X.Y`, `X`, and `latest`. `publish-github` needs `npm-package` and attaches that tarball. `publish-npm` publishes to the npm registry only when the repository variable `NPM_PUBLISH` is `true`. A manual run of `publish-npm` does not need that variable.
-
-A branch push, including `master`, does not push the image. A manual `publish-container` on `master` pushes `ghcr.io/rbe/dashboard:edge` and `:sha-<commit>`. A manual run on any other branch pushes `:sha-<commit>`. The image name and the package version are set once, as workflow variables.
-
-```sh
-podman pull ghcr.io/rbe/dashboard:latest
-```
-
-The published image is `linux/amd64`. The workflow and the image use Node 24. `make image` passes that same major into the image. Podman and make do not need Node.js on the host.
-
-## Package
-
-```sh
-make test
-make linux-binary
-```
-
-`make linux-binary` writes the Linux executable CI builds to `build/dashboard`. Tagging `vX.Y.Z` (matching `package.json`) attaches the npm tarball to the GitHub release and publishes the container image. `make npm-package` packs the tarball from `dist`. Run `make build` first so that directory exists.
+The workflow and the image use Node 24. `make image` passes that same major into the image.
