@@ -27,7 +27,7 @@ Packages and images contain the tested build only. `.gitignore`, `.npmignore`, `
 
 ## Runs
 
-A branch push runs through `report` and does not publish. `workflow_dispatch` can start one job on the chosen branch, including a publish job, and that manual publish is allowed to push. Latest major versions of GitHub Actions.
+A push to the default branch (`master` or `main`) runs the `publish-*` jobs after the jobs they need. Any other branch push runs through `report` and does not publish. `workflow_dispatch` can start one job on the chosen branch, including a publish job, and that manual publish is allowed to push. Latest major versions of GitHub Actions.
 
 ## Report and test
 

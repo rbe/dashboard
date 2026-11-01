@@ -28,7 +28,7 @@ export function resolveImageTags({ imageName, ref, refName, sha, version, event 
     }
   }
 
-  if (ref === 'refs/heads/master') {
+  if (ref === 'refs/heads/master' || ref === 'refs/heads/main') {
     if (!sha || sha.length < 12) throw new Error('Missing commit SHA')
     return {
       ...base,

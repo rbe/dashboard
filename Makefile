@@ -63,7 +63,7 @@ help: ## Show this help
 	@echo
 	@echo "Descriptions that start with \"Match CI\" are the jobs the GitHub workflow runs."
 	@echo "Podman is the only container engine, on a laptop and in CI."
-	@echo "make ci is a branch push: setup, build, test, npm-package, report, and docs. It does not publish."
+	@echo "make ci runs setup, build, test, npm-package, report, and docs. It does not publish."
 	@echo "make run builds the image if needed and listens on https://127.0.0.1:$(PORT)."
 	@echo "The data file is ./$(DATA_FILE) (mounted into the container)."
 	@echo "The self-signed certificate is ./data/tls/cert.pem."
@@ -95,7 +95,7 @@ stop: ## Stop and remove the detached container
 	@podman rm -f $(NAME) >/dev/null 2>&1 || true
 	@echo "Stopped $(NAME)"
 
-ci: setup build test npm-package report docs ## Match CI: branch push through report and docs, no publish
+ci: setup build test npm-package report docs ## Match CI: jobs through report and docs; this target does not publish
 	@echo "Branch pipeline finished. Nothing was published."
 
 # Local Linux checks. The workflow does not call this target.
