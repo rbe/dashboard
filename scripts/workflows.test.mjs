@@ -158,11 +158,14 @@ describe('workflow', () => {
     expect(pipeline['publish-container']).not.toContain('name: docs')
   })
 
-  it('publishes only on a tag or a manual run of that job', () => {
+  it('publishes on the default branch, a version tag, or a manual run of that job', () => {
     for (const name of ['publish-npm', 'publish-container', 'publish-github']) {
       expect(pipeline[name], name).toContain("inputs.job == '" + name + "'")
+      expect(pipeline[name], name).toContain("github.event_name == 'workflow_dispatch'")
+      expect(pipeline[name], name).toContain("github.ref == 'refs/heads/master'")
+      expect(pipeline[name], name).toContain("github.ref == 'refs/heads/main'")
       expect(pipeline[name], name).toContain("startsWith(github.ref, 'refs/tags/v')")
-      expect(pipeline[name], name).not.toContain('refs/heads/master')
+      expect(pipeline[name], name).not.toContain('refs/heads/**')
     }
     expect(pipeline['publish-npm']).toContain("vars.NPM_PUBLISH == 'true'")
     expect(pipeline['publish-npm']).toContain("github.event_name == 'workflow_dispatch' && 'true' || vars.NPM_PUBLISH")
@@ -192,6 +195,11 @@ describe('workflow', () => {
     expect(pipeline.build).toContain("inputs.job == 'publish-github'")
     expect(pipeline.setup).toContain("inputs.job == 'publish-github'")
     expect(pipeline['npm-package']).toContain("inputs.job == 'publish-github'")
+    expect(pipeline.test).toContain("inputs.job == 'publish-container'")
+    expect(pipeline.build).toContain("inputs.job == 'publish-container'")
+    expect(pipeline.setup).toContain("inputs.job == 'publish-container'")
+    expect(pipeline['npm-package']).not.toContain("inputs.job == 'publish-container'")
+    expect(pipeline['publish-container']).toContain("needs.build.result == 'success'")
     expect(pipeline['publish-npm']).toContain('needs: [npm-package, test, report]')
     expect(pipeline['publish-container']).toContain('needs: [build, test, report]')
     expect(pipeline['publish-npm']).not.toContain('publish-container')

@@ -34,6 +34,34 @@ describe('container image tags', () => {
     ).toThrow(/does not match/)
   })
 
+  it('publishes edge and a commit tag from main', () => {
+    const result = resolveImageTags({
+      imageName: 'ghcr.io/rbe/dashboard',
+      ref: 'refs/heads/main',
+      refName: 'main',
+      sha,
+      version: '1.0.0',
+    })
+    expect(result.publish).toBe(true)
+    expect(result.tags).toEqual([
+      'ghcr.io/rbe/dashboard:edge',
+      'ghcr.io/rbe/dashboard:sha-0123456789ab',
+    ])
+  })
+
+  it('does not publish a feature branch push', () => {
+    const result = resolveImageTags({
+      imageName: 'ghcr.io/rbe/dashboard',
+      ref: 'refs/heads/feature/pipeline',
+      refName: 'feature/pipeline',
+      sha,
+      version: '1.0.0',
+      event: 'push',
+    })
+    expect(result.publish).toBe(false)
+    expect(result.tags).toEqual([])
+  })
+
   it('publishes edge and a commit tag from master', () => {
     const result = resolveImageTags({
       imageName: 'ghcr.io/rbe/dashboard',
