@@ -6,14 +6,12 @@ const JOBS = [
   ['setup', 'JOB_RESULT_SETUP'],
   ['build', 'JOB_RESULT_BUILD'],
   ['test', 'JOB_RESULT_TEST'],
-  ['npm-package', 'JOB_RESULT_NPM_PACKAGE'],
   ['docs', 'JOB_RESULT_DOCS'],
-  ['publish-npm', 'JOB_RESULT_PUBLISH_NPM'],
   ['publish-container', 'JOB_RESULT_PUBLISH_IMAGE'],
 ]
 
 export function isPublishRef(ref) {
-  return ref === 'refs/heads/master' || ref === 'refs/heads/main' || String(ref || '').startsWith('refs/tags/v')
+  return ref === 'refs/heads/master' || ref === 'refs/heads/main'
 }
 
 export function explainContainer({ event = '', ref = '', dispatchJob = '', result = '', summary = '' }) {
@@ -32,42 +30,17 @@ export function explainContainer({ event = '', ref = '', dispatchJob = '', resul
   if (event === 'workflow_dispatch' && dispatchJob === 'publish-container') {
     return 'publish-container was skipped because setup, build, or test did not succeed.'
   }
+  if (event === 'push' && String(ref || '').startsWith('refs/tags/')) {
+    return 'A tag push does not publish the image. publish-container runs on a push to `master` or `main`, and when Run workflow selects it.'
+  }
   if (event === 'push' && !isPublishRef(ref)) {
-    return 'This branch stops before publish. A push publishes the image only from `master`, `main`, or a `v*` tag.'
+    return 'This branch stops before publish. A push publishes the image only from `master` or `main`.'
   }
   if (event === 'push' && isPublishRef(ref)) {
     return 'publish-container was skipped because build or test did not succeed.'
   }
   if (result === 'cancelled') return 'publish-container was cancelled.'
   return 'publish-container did not run.'
-}
-
-export function explainNpm({ event = '', ref = '', dispatchJob = '', result = '', summary = '', npmPublish = '' }) {
-  if (result === 'success' || result === 'ran' || result === 'failure') {
-    if (summary) return summary.trim()
-    if (result === 'failure') return 'publish-npm failed before it recorded a result. See the log.'
-    if (result === 'success') return 'publish-npm succeeded but did not record a result.'
-    return 'No npm publish summary was recorded.'
-  }
-  if (!event && !ref && !dispatchJob) {
-    return 'No npm publish was recorded. A local report does not publish the package.'
-  }
-  if (event === 'workflow_dispatch' && dispatchJob && dispatchJob !== 'publish-npm') {
-    return `Run workflow selected \`${dispatchJob}\`, so the npm package was not published.`
-  }
-  if (event === 'workflow_dispatch' && dispatchJob === 'publish-npm') {
-    return 'publish-npm was skipped because setup, build, test, or npm-package did not succeed.'
-  }
-  if (event === 'push' && !isPublishRef(ref)) {
-    return 'This branch stops before publish. The npm package was not published.'
-  }
-  if (event === 'push' && isPublishRef(ref) && npmPublish !== 'true') {
-    return 'NPM_PUBLISH is not true, so the npm package was not published.'
-  }
-  if (event === 'push' && isPublishRef(ref)) {
-    return 'publish-npm was skipped because npm-package or test did not succeed.'
-  }
-  return 'publish-npm did not run.'
 }
 
 function walk(dir, acc = []) {
@@ -202,7 +175,6 @@ function auditExcerpt(text) {
 
 function jobEvidence(name, ctx) {
   if (name === 'publish-container') return Boolean(ctx.summaries.container)
-  if (name === 'publish-npm') return Boolean(ctx.summaries.npm)
   if (name === 'test') return ctx.tests.present || ctx.coverage.present
   if (ctx.summaries[name]) return true
   return ctx.logs.some((log) => log.name.includes(name))
@@ -227,7 +199,7 @@ export function loadReport(root, env = process.env) {
   if (existsSync(directCoverage)) files.push(...walk(directCoverage))
 
   const logs = []
-  const summaries = { setup: '', build: '', 'npm-package': '', docs: '', container: '', npm: '' }
+  const summaries = { setup: '', build: '', docs: '', container: '' }
   for (const file of files) {
     if (file.endsWith('.tgz') || file.endsWith('.tar')) continue
     const base = path.basename(file)
@@ -238,10 +210,8 @@ export function loadReport(root, env = process.env) {
     if (file.split(path.sep).includes('summaries') && base.endsWith('.md')) {
       const text = readText(file)
       if (base === 'publish-container.md') summaries.container = text
-      else if (base === 'publish-npm.md') summaries.npm = text
       else if (base === 'setup.md') summaries.setup = text
       else if (base === 'build.md') summaries.build = text
-      else if (base === 'npm-package.md') summaries['npm-package'] = text
       else if (base === 'docs.md') summaries.docs = text
     }
   }
@@ -266,7 +236,6 @@ export function loadReport(root, env = process.env) {
     sha: env.GITHUB_SHA || '',
     repository: env.GITHUB_REPOSITORY || '',
     dispatchJob: env.DISPATCH_JOB || '',
-    npmPublish: env.NPM_PUBLISH || '',
     jobs,
     logs,
     summaries,
@@ -306,21 +275,13 @@ export function renderReport(model) {
     result: model.jobs.find((job) => job.name === 'publish-container')?.result || '',
     summary: model.summaries.container,
   })
-  const npmBody = explainNpm({
-    event: model.event,
-    ref: model.ref,
-    dispatchJob: model.dispatchJob,
-    result: model.jobs.find((job) => job.name === 'publish-npm')?.result || '',
-    summary: model.summaries.npm,
-    npmPublish: model.npmPublish,
-  })
   const lines = [
     '# Dashboard CI report',
     '',
     testLead(model.tests),
     containerLead(model.summaries.container, containerBody),
     model.coverage.present ? `Coverage lines: ${model.coverage.lines}%.` : 'Coverage: no summary was collected.',
-    'GitHub release: none. Delivery is the container image. This run does not upload an npm tarball, image archive, checksums, or source to a release.',
+    'GitHub release: none. Delivery is the container image.',
     '',
     '## Run',
     '',
@@ -335,7 +296,6 @@ export function renderReport(model) {
     `| Version | ${model.version || 'n/a'} |`,
     `| Image | ${model.imageName || 'n/a'} |`,
     `| Node | ${model.nodeVersion || 'n/a'} |`,
-    `| NPM_PUBLISH | ${model.npmPublish || 'unset'} |`,
     '',
     '## Jobs',
     '',
@@ -381,10 +341,8 @@ export function renderReport(model) {
   lines.push('## Setup', '', fence(model.summaries.setup) || 'No setup summary was collected.', '')
   if (model.audit) lines.push('npm audit:', '', '```', model.audit, '```', '')
   lines.push('## Build', '', fence(model.summaries.build) || 'No build summary was collected.', '')
-  lines.push('## npm package', '', fence(model.summaries['npm-package']) || 'No package summary was collected.', '')
   lines.push('## Docs', '', fence(model.summaries.docs) || 'No docs summary was collected.', '')
   lines.push('## Container publish', '', containerBody, '')
-  lines.push('## npm publish', '', npmBody, '')
   lines.push('## Logs', '')
   if (model.logs.length === 0) lines.push('No make or script logs were collected.', '')
   else {
@@ -429,10 +387,8 @@ export function assemble({ root, env = process.env }) {
   for (const [key, filename] of [
     ['setup', 'setup.md'],
     ['build', 'build.md'],
-    ['npm-package', 'npm-package.md'],
     ['docs', 'docs.md'],
     ['container', 'publish-container.md'],
-    ['npm', 'publish-npm.md'],
   ]) {
     if (!model.summaries[key]) continue
     const dest = path.join(out, 'summaries', filename)

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, wr
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { assemble, explainContainer, explainNpm } from './assemble-report.mjs'
+import { assemble, explainContainer } from './assemble-report.mjs'
 
 const sha = '0123456789abcdef0123456789abcdef01234567'
 
@@ -29,15 +29,14 @@ describe('publish explanations', () => {
     ).toContain('This branch stops before publish')
   })
 
-  it('explains a master push that skips npm when the variable is off', () => {
+  it('explains a tag push that does not publish the image', () => {
     expect(
-      explainNpm({
+      explainContainer({
         event: 'push',
-        ref: 'refs/heads/master',
+        ref: 'refs/tags/v1.0.0',
         result: 'skipped',
-        npmPublish: '',
       }),
-    ).toContain('NPM_PUBLISH is not true')
+    ).toContain('A tag push does not publish the image')
   })
 
   it('explains a manual container publish whose producers failed', () => {
@@ -115,10 +114,9 @@ describe('assemble report', () => {
         '# build\n\nLinux binary: build/dashboard\nImage archive: dashboard-image.tar (10 bytes)\n',
       )
       write(root, 'build/inputs/report-build/logs/build.log', 'Wrote build/dashboard\n')
-      write(root, 'build/inputs/report-npm-package/summaries/npm-package.md', '# npm-package\n\nTarball: build/dashboard-1.0.0.tgz\n')
       write(root, 'build/inputs/report-docs/summaries/docs.md', '# docs\n\n- pipeline-rules.md\n')
-      write(root, 'build/inputs/report-npm-package/dashboard-1.0.0.tgz', 'not a release asset')
       write(root, 'build/inputs/report-build/dashboard-image.tar', 'not a release asset')
+      write(root, 'build/inputs/report-build/dashboard-1.0.0.tgz', 'not a release asset')
 
       const markdown = assemble({
         root,
@@ -130,13 +128,10 @@ describe('assemble report', () => {
           GITHUB_REPOSITORY: 'rbe/dashboard',
           NODE_VERSION: '24',
           IMAGE_NAME: 'ghcr.io/rbe/dashboard',
-          NPM_PUBLISH: '',
           JOB_RESULT_SETUP: 'success',
           JOB_RESULT_BUILD: 'success',
           JOB_RESULT_TEST: 'failure',
-          JOB_RESULT_NPM_PACKAGE: 'success',
           JOB_RESULT_DOCS: 'success',
-          JOB_RESULT_PUBLISH_NPM: 'skipped',
           JOB_RESULT_PUBLISH_IMAGE: 'skipped',
         },
       })
@@ -147,11 +142,11 @@ describe('assemble report', () => {
       expect(markdown).toContain('Coverage lines: 80%.')
       expect(markdown).toContain('| branches | 60 |')
       expect(markdown).toContain('This branch stops before publish')
-      expect(markdown).toContain('The npm package was not published.')
       expect(markdown).toContain('GitHub release: none')
+      expect(markdown).not.toContain('npm-package')
+      expect(markdown).not.toContain('publish-npm')
       expect(markdown).toContain('npm audit reported advisories')
       expect(markdown).toContain('Linux binary: build/dashboard')
-      expect(markdown).toContain('Tarball: build/dashboard-1.0.0.tgz')
       expect(markdown).toContain('pipeline-rules.md')
       expect(markdown).toContain(`| Commit | ${sha} |`)
       expect(markdown).toContain('| publish-container | skipped |')
@@ -171,7 +166,7 @@ describe('assemble report', () => {
     }
   })
 
-  it('records pushed tags and a manual npm skip', () => {
+  it('records pushed tags from a manual publish', () => {
     const root = workspace()
     try {
       write(
@@ -190,12 +185,12 @@ describe('assemble report', () => {
           IMAGE_NAME: 'ghcr.io/rbe/dashboard',
           NODE_VERSION: '24',
           JOB_RESULT_PUBLISH_IMAGE: 'success',
-          JOB_RESULT_PUBLISH_NPM: 'skipped',
         },
       })
       expect(markdown).toContain('Image pushed: ghcr.io/rbe/dashboard:sha-0123456789ab.')
       expect(markdown).toContain('sha-<commit>')
-      expect(markdown).toContain('Run workflow selected `publish-container`, so the npm package was not published.')
+      expect(markdown).toContain('| publish-container | success |')
+      expect(markdown).not.toContain('publish-npm')
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
