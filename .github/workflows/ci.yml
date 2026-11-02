@@ -1,18 +1,11 @@
-# One pipeline. Delivery is the container image. This repository does not
-# create a GitHub release or upload a tarball, image archive, checksums,
-# or source to one.
-# A push to master or main runs publish-container after the jobs it needs,
-# and runs publish-npm when NPM_PUBLISH=true. Any other branch push runs
-# through report and does not publish. A v* tag uses the same publish rule.
-# A manual publish-npm may publish without NPM_PUBLISH.
-# workflow_dispatch runs the one selected job. A manual publish job also
-# runs the jobs that produce its artifact, and that manual publish may push.
-# report is the last job. It runs after publish, including when publish is
-# skipped, and collects the run into one artifact.
-# build and test both need setup, so they run together. npm-package needs
-# both, then packs the built app. docs renders docs/ to HTML and runs
-# beside them. That HTML is not in the package or the image.
-# publish-npm and publish-container do not need each other.
+# One pipeline. Delivery is the container image.
+# Jobs: setup, then build, test, and docs together (each needs setup),
+# then publish-container (needs build and test), then report.
+# publish-container runs on a push to master or main, and when
+# workflow_dispatch selects it. Any other branch skips it.
+# report is last. It still runs when publish-container is skipped or fails.
+# workflow_dispatch starts the one selected job. A manual publish-container
+# also runs setup, build, and test, and that manual publish may push.
 # There is no pull_request trigger, so a same-repo branch is not run twice.
 
 name: CI
@@ -33,9 +26,7 @@ on:
           - setup
           - build
           - test
-          - npm-package
           - docs
-          - publish-npm
           - publish-container
           - report
 
@@ -56,8 +47,6 @@ jobs:
     if: >-
       github.event_name != 'workflow_dispatch' ||
       inputs.job == 'setup' ||
-      inputs.job == 'npm-package' ||
-      inputs.job == 'publish-npm' ||
       inputs.job == 'publish-container' ||
       inputs.job == 'report'
     runs-on: ubuntu-26.04
@@ -90,7 +79,7 @@ jobs:
         (github.event_name == 'workflow_dispatch' && inputs.job == 'build') ||
         (
           github.event_name == 'workflow_dispatch' &&
-          (inputs.job == 'npm-package' || inputs.job == 'publish-npm' || inputs.job == 'publish-container' || inputs.job == 'report') &&
+          (inputs.job == 'publish-container' || inputs.job == 'report') &&
           needs.setup.result == 'success'
         )
       )
@@ -135,7 +124,7 @@ jobs:
         (github.event_name == 'workflow_dispatch' && inputs.job == 'test') ||
         (
           github.event_name == 'workflow_dispatch' &&
-          (inputs.job == 'npm-package' || inputs.job == 'publish-npm' || inputs.job == 'publish-container' || inputs.job == 'report') &&
+          (inputs.job == 'publish-container' || inputs.job == 'report') &&
           needs.setup.result == 'success'
         )
       )
@@ -161,54 +150,19 @@ jobs:
           if-no-files-found: ignore
           retention-days: 1
 
-  npm-package:
-    needs: [build, test]
+  docs:
+    needs: setup
     if: >-
       always() &&
       (
-        (
-          github.event_name != 'workflow_dispatch' &&
-          needs.build.result == 'success' &&
-          needs.test.result == 'success'
-        ) ||
+        (github.event_name != 'workflow_dispatch' && needs.setup.result == 'success') ||
+        (github.event_name == 'workflow_dispatch' && inputs.job == 'docs') ||
         (
           github.event_name == 'workflow_dispatch' &&
-          (inputs.job == 'npm-package' || inputs.job == 'publish-npm' || inputs.job == 'report') &&
-          needs.build.result == 'success' &&
-          needs.test.result == 'success'
+          inputs.job == 'report' &&
+          needs.setup.result == 'success'
         )
       )
-    runs-on: ubuntu-26.04
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
-        with:
-          name: node_modules
-          path: ci-artifacts
-      - uses: actions/download-artifact@v8
-        with:
-          name: dist
-          path: dist
-      - name: Pack the npm tarball
-        run: make npm-package
-      - uses: actions/upload-artifact@v7
-        with:
-          name: npm-package
-          path: build/*.tgz
-          if-no-files-found: error
-          retention-days: 1
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: report-npm-package
-          path: |
-            build/logs
-            build/summaries
-          if-no-files-found: ignore
-          retention-days: 1
-
-  docs:
-    if: github.event_name != 'workflow_dispatch' || inputs.job == 'docs' || inputs.job == 'report'
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
@@ -230,54 +184,6 @@ jobs:
           if-no-files-found: ignore
           retention-days: 1
 
-  publish-npm:
-    needs: [npm-package, test]
-    if: >-
-      always() &&
-      needs.npm-package.result == 'success' &&
-      needs.test.result == 'success' &&
-      (
-        (github.event_name == 'workflow_dispatch' && inputs.job == 'publish-npm') ||
-        (
-          github.event_name == 'push' &&
-          vars.NPM_PUBLISH == 'true' &&
-          (
-            github.ref == 'refs/heads/master' ||
-            github.ref == 'refs/heads/main' ||
-            startsWith(github.ref, 'refs/tags/v')
-          )
-        )
-      )
-    runs-on: ubuntu-26.04
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
-        with:
-          name: npm-package
-          path: build
-      - uses: actions/setup-node@v7
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          registry-url: https://registry.npmjs.org
-      - name: Publish the npm package
-        run: make publish-npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_PUBLISH: ${{ github.event_name == 'workflow_dispatch' && 'true' || vars.NPM_PUBLISH }}
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: report-publish-npm
-          path: |
-            build/logs
-            build/summaries
-          if-no-files-found: ignore
-          retention-days: 1
-
   publish-container:
     needs: [build, test]
     if: >-
@@ -290,8 +196,7 @@ jobs:
           github.event_name == 'push' &&
           (
             github.ref == 'refs/heads/master' ||
-            github.ref == 'refs/heads/main' ||
-            startsWith(github.ref, 'refs/tags/v')
+            github.ref == 'refs/heads/main'
           )
         )
       )
@@ -324,7 +229,7 @@ jobs:
           retention-days: 1
 
   report:
-    needs: [setup, build, test, npm-package, docs, publish-npm, publish-container]
+    needs: [setup, build, test, docs, publish-container]
     if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-26.04
     steps:
@@ -338,13 +243,10 @@ jobs:
         run: make report
         env:
           DISPATCH_JOB: ${{ inputs.job }}
-          NPM_PUBLISH: ${{ vars.NPM_PUBLISH }}
           JOB_RESULT_SETUP: ${{ needs.setup.result }}
           JOB_RESULT_BUILD: ${{ needs.build.result }}
           JOB_RESULT_TEST: ${{ needs.test.result }}
-          JOB_RESULT_NPM_PACKAGE: ${{ needs.npm-package.result }}
           JOB_RESULT_DOCS: ${{ needs.docs.result }}
-          JOB_RESULT_PUBLISH_NPM: ${{ needs.publish-npm.result }}
           JOB_RESULT_PUBLISH_IMAGE: ${{ needs.publish-container.result }}
       - uses: actions/upload-artifact@v7
         if: always()

@@ -17,7 +17,7 @@ The Makefile is the interface. A laptop and CI run the same targets. Workflow YA
 
 `NAME` in the Makefile is the npm package name and the GitHub repository name. Do not commit `data/`.
 
-The workflow is `.github/workflows/ci.yml`. Its jobs are `setup`, `build`, `test`, `npm-package`, `docs`, `publish-npm`, `publish-container`, and `report`. Delivery is the container image. This repository does not publish a GitHub release. A push to `master` or `main` runs `publish-container` after the jobs it needs, and runs `publish-npm` when the repository variable `NPM_PUBLISH` is `true`. A `v*.*.*` tag uses the same rule. Any other branch runs through `report` and does not publish. `report` is the last job. It still runs when publish is skipped, and collects make output, script output, test results, coverage, and publish results into one artifact. `workflow_dispatch` starts one selected job. That includes `publish-container`, and that run publishes. `report` runs after it.
+The workflow is `.github/workflows/ci.yml`. Its jobs are `setup`, `build`, `test`, `docs`, `publish-container`, and `report`. Delivery is the container image. `build`, `test`, and `docs` need `setup` and run together. `docs` needs only `setup`. `publish-container` needs `build` and `test`. It runs on a push to `master` or `main`, and when `workflow_dispatch` selects it. Any other branch skips it. `report` is last, after `publish-container`. It still runs when that job is skipped or fails, and collects make output, script output, test results, coverage, and publish results into one artifact. `workflow_dispatch` starts one selected job. A manual `publish-container` may push.
 
 Do not weaken the workflow contract test to make a one-off pass.
 
