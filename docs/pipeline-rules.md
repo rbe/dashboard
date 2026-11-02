@@ -1,38 +1,53 @@
 # Pipeline rules
 
-Locked 30 Oct 2026. Apply to `finanzdesk`, `dashboard`, `ernaehrung`, `erechnung`, and `reelbox`. Keep a project-specific job only when that repo really has that output.
+This repository has one workflow, `.github/workflows/ci.yml`. A job calls the Makefile target with the same name.
 
-## One workflow
+## Jobs
 
-One GitHub workflow file. Jobs, in order, using these names:
+In file order:
 
 - `setup`
 - `build`
 - `test`
-- `npm-package` when the repo packs an npm tarball. Do not call it `npm-tarball`.
+- `npm-package`
 - `report`
-- `publish-npm` when the repo publishes to the npm registry
-- `publish-container` when the repo pushes a container image
-- `publish-github` when the repo attaches an artifact to a GitHub release. `erechnung` uses this, not npm or a container.
+- `docs`
+- `publish-npm`
+- `publish-container`
+- `publish-github`
 
-A job calls the Makefile target with the same name. Do not call `host-checks` from the workflow. Split that into the separate targets the jobs run.
+`build` and `test` both need `setup`, so they run together. `npm-package` needs `build` and `test`, and it runs only after both succeed. It packs the built app from the `dist` artifact.
+
+`report` needs `test`. It collects the coverage report and test output when `test` wrote them. It is skipped when `test` did not set `reports=true`.
+
+`docs` has no `needs`. It renders `docs/` to HTML and runs beside the other jobs. That HTML stays out of the npm package and the image. The render skips when `docs/` has no pages.
+
+`publish-npm`, `publish-container`, and `publish-github` do not need each other. A publish job runs when the jobs it needs have succeeded. It also runs when `report` was skipped and those other jobs succeeded.
+
+- `publish-npm` needs `npm-package`, `test`, and `report`. It publishes the tarball from `npm-package`.
+- `publish-container` needs `build`, `test`, and `report`. It pushes the image `build` saved.
+- `publish-github` needs `npm-package`, `test`, and `report`. It attaches that tarball to a GitHub release named with the branch or tag (`master`, `main`, or `vX.Y.Z`).
+
+A manual `publish-npm` or `publish-github` also runs `setup`, `build`, `test`, and `npm-package`. A manual `publish-container` also runs `setup`, `build`, and `test`. Those runs leave `report` skipped.
 
 ## Artifacts
 
-Pass artifacts between jobs. Do not repeat a job’s work in a later job. A job that can run once its own inputs exist runs beside the others. Web apps do not build an OS-specific package. Delivery is the container image.
+Pass artifacts between jobs. A later job downloads what an earlier job uploaded.
 
-`npm-package` needs `build` and `test`, and runs only after both succeed. It packs the built app, not the repository. `publish-github` needs the job that produced the file (`build` or `npm-package`) and downloads that artifact. It does not assemble or pack again. A manual run of `publish-github` still runs that producing job.
+`setup` uploads `node_modules`. `build` uploads `dist` and the image tar. `test` uploads coverage and test output. `npm-package` uploads the tarball. `docs` uploads the HTML when the render wrote files.
 
-Packages and images contain the tested build only. `.gitignore`, `.npmignore`, `.dockerignore`, or `.containerignore` keep out `.claude/`, `AGENTS.md`, `docs/`, and any other instruction or private files. A separate job renders `docs/` as HTML or PDF. That output is not part of the app package or image.
+`.npmignore` and `.containerignore` keep `.claude/`, `AGENTS.md`, `docs/`, and other instruction or private files out of the package and the image.
 
 ## Runs
 
-A push to the default branch (`master` or `main`) runs the `publish-*` jobs after the jobs they need. Any other branch push runs through `report` and does not publish. `workflow_dispatch` can start one job on the chosen branch, including a publish job, and that manual publish is allowed to push. Latest major versions of GitHub Actions.
+A push to `master` or `main` runs `publish-container` and `publish-github` after the jobs they need, and runs `publish-npm` when the repository variable `NPM_PUBLISH` is `true`. Any other branch runs through `report` and does not publish. `docs` runs on every push. A `v*.*.*` tag uses the same publish rule when the tag matches `package.json`. A manual run of `publish-npm` may publish without `NPM_PUBLISH`.
 
-## Report and test
+`workflow_dispatch` starts the one selected job, including a publish job, and that manual publish may push. Choosing `report` alone does not run `test`, so `report` stays skipped.
 
-`test` writes a coverage report and test output when the tool can generate them. `report` collects those artifacts and skips when none exist.
+There is no `pull_request` trigger, so a same-repo branch is not run twice.
 
 ## Names
 
-Workflow-level variables hold the container image name and the version, so a rename happens in one place. `finanzdesk` image is `ghcr.io/rbe/orgme`. `npm audit` stays a warning, not a failure.
+`IMAGE_NAME` is `ghcr.io/rbe/dashboard`. `VERSION` is the `package.json` version. Both are workflow-level variables. The workflow and the image use Node 24. `npm audit` is a warning, not a failure.
+
+`publish-container` on `master` or `main` pushes `edge` and `sha-<commit>`. On a `vX.Y.Z` tag it pushes `X.Y.Z`, `X.Y`, `X`, and `latest`. A manual run on any other branch pushes `sha-<commit>`. A manual run on a `vX.Y.Z` tag pushes those version tags.

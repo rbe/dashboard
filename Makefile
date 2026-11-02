@@ -95,7 +95,7 @@ stop: ## Stop and remove the detached container
 	@podman rm -f $(NAME) >/dev/null 2>&1 || true
 	@echo "Stopped $(NAME)"
 
-ci: setup build test npm-package report docs ## Match CI: jobs through report and docs; this target does not publish
+ci: setup build test npm-package report docs ## Laptop run through report and docs; this target does not publish
 	@echo "Branch pipeline finished. Nothing was published."
 
 # Local Linux checks. The workflow does not call this target.
