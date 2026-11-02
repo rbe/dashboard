@@ -33,25 +33,18 @@ VERSION ?= $(shell sed -n 's/^  "version": "\([^"]*\)".*/\1/p' package.json)
 SMOKE_NAME ?= $(NAME)-ci
 SMOKE_PORT ?= $(PORT)
 IMAGE_TAR ?= image/$(NAME)-image.tar
-RELEASE_DIR ?= release
 SETUP_TAR ?= ci-artifacts/node_modules.tar
 
 IMAGE_SOURCE ?= $(if $(GITHUB_SERVER_URL),$(GITHUB_SERVER_URL)/$(GITHUB_REPOSITORY),https://github.com/rbe/$(NAME))
 IMAGE_REVISION ?= $(or $(GITHUB_SHA),local)
 IMAGE_VERSION ?= $(VERSION)
 
-ifeq ($(shell command -v sha256sum >/dev/null 2>&1 && echo yes),yes)
-SHA256 = sha256sum
-else
-SHA256 = shasum -a 256
-endif
-
 # Single line so the expanded command stays in one shell invocation.
-NODE_RUN_OPTS = --rm -e HOME=/tmp -e npm_config_cache=/tmp/npm-cache -e npm_config_update_notifier=false -e NODE_VERSION="$(NODE_VERSION)" -e IMAGE_NAME="$(IMAGE_NAME)" -e GITHUB_REF -e GITHUB_REF_NAME -e GITHUB_SHA -e GITHUB_REPOSITORY -e GITHUB_SERVER_URL -e GITHUB_OUTPUT -e GITHUB_EVENT_NAME -e TGZ_NAME -e CI -v "$(CURDIR)":/work:Z -w /work
+NODE_RUN_OPTS = --rm -e HOME=/tmp -e npm_config_cache=/tmp/npm-cache -e npm_config_update_notifier=false -e NODE_VERSION="$(NODE_VERSION)" -e IMAGE_NAME="$(IMAGE_NAME)" -e GITHUB_REF -e GITHUB_REF_NAME -e GITHUB_SHA -e GITHUB_REPOSITORY -e GITHUB_SERVER_URL -e GITHUB_OUTPUT -e GITHUB_EVENT_NAME -e DISPATCH_JOB -e NPM_PUBLISH -e JOB_RESULT_SETUP -e JOB_RESULT_BUILD -e JOB_RESULT_TEST -e JOB_RESULT_NPM_PACKAGE -e JOB_RESULT_DOCS -e JOB_RESULT_PUBLISH_NPM -e JOB_RESULT_PUBLISH_IMAGE -e CI -v "$(CURDIR)":/work:Z -w /work
 NODE_RUN = podman run $(NODE_RUN_OPTS) $(NODE_IMAGE)
 
 .DEFAULT_GOAL := help
-.PHONY: help image run stop ci host-checks setup deps check-tag npm-ci audit build test linux-binary smoke-linux-binary npm-package pack-smoke npm-tarball report docs resolve-ghcr-tags ci-image smoke-image image-save image-load image-push publish-container publish-npm npm-publish publish-github release-assets
+.PHONY: help image run stop ci host-checks setup deps check-tag npm-ci audit build test linux-binary smoke-linux-binary npm-package pack-smoke npm-tarball report docs resolve-ghcr-tags ci-image smoke-image image-save image-load image-push publish-container publish-npm npm-publish
 
 help: ## Show this help
 	@echo "Host requirements for image, run, and stop: Podman and make."
@@ -63,7 +56,7 @@ help: ## Show this help
 	@echo
 	@echo "Descriptions that start with \"Match CI\" are the jobs the GitHub workflow runs."
 	@echo "Podman is the only container engine, on a laptop and in CI."
-	@echo "make ci runs setup, build, test, npm-package, report, and docs. It does not publish."
+	@echo "make ci runs setup, build, test, npm-package, docs, and report. It does not publish."
 	@echo "make run builds the image if needed and listens on https://127.0.0.1:$(PORT)."
 	@echo "The data file is ./$(DATA_FILE) (mounted into the container)."
 	@echo "The self-signed certificate is ./data/tls/cert.pem."
@@ -95,15 +88,29 @@ stop: ## Stop and remove the detached container
 	@podman rm -f $(NAME) >/dev/null 2>&1 || true
 	@echo "Stopped $(NAME)"
 
-ci: setup build test npm-package report docs ## Laptop run through report and docs; this target does not publish
+ci: setup build test npm-package docs report ## Laptop run through docs and report; this target does not publish
 	@echo "Branch pipeline finished. Nothing was published."
 
 # Local Linux checks. The workflow does not call this target.
 host-checks: setup test linux-binary smoke-linux-binary npm-package
 
-setup: check-tag npm-ci audit ## Match CI: install, version check, and npm audit
-	@mkdir -p ci-artifacts
+# CI entry targets log their make output. CI_LOG_INNER=1 is the real recipe.
+# The workflow runs `make <job>` and uploads build/logs for the report.
+ifneq ($(CI_LOG_INNER),)
+setup: check-tag npm-ci audit
+	@mkdir -p ci-artifacts build/summaries
 	tar -cf $(SETUP_TAR) node_modules
+	@{ \
+	  echo "# setup"; \
+	  echo; \
+	  echo "node_modules archive: $(SETUP_TAR)"; \
+	  echo "npm audit is a warning, not a failure. The log has the audit output."; \
+	} > build/summaries/setup.md
+else
+setup: ## Match CI: install, version check, and npm audit
+	@mkdir -p build/logs
+	@set -o pipefail; $(MAKE) --no-print-directory CI_LOG_INNER=1 setup 2>&1 | tee build/logs/setup.log
+endif
 
 # Phony on purpose: the recipe reuses node_modules or the setup archive.
 deps:
@@ -146,11 +153,34 @@ audit: ## npm audit (a warning, not a failure)
 	@if [ ! -d node_modules ]; then $(MAKE) npm-ci; fi
 	$(NODE_RUN) sh -c 'npm audit --audit-level=high || echo "npm audit reported advisories; continuing"'
 
-build: deps linux-binary smoke-linux-binary smoke-image image-save ## Match CI: Linux binary and one container image
+ifneq ($(CI_LOG_INNER),)
+build: deps linux-binary smoke-linux-binary smoke-image image-save
+	@mkdir -p build/summaries
+	@bytes=$$(wc -c < $(NAME)-image.tar | tr -d ' '); \
+	{ \
+	  echo "# build"; \
+	  echo; \
+	  echo "Linux binary: build/$(NAME)"; \
+	  echo "Container image: $(CI_IMAGE)"; \
+	  echo "Node image: $(NODE_IMAGE)"; \
+	  echo "Image archive: $(NAME)-image.tar ($$bytes bytes)"; \
+	  echo "The archive is a job artifact for publish-container. It is not a GitHub release asset."; \
+	} > build/summaries/build.md
 	@echo "Built the Linux binary and $(CI_IMAGE)"
+else
+build: ## Match CI: Linux binary and one container image
+	@mkdir -p build/logs
+	@set -o pipefail; $(MAKE) --no-print-directory CI_LOG_INNER=1 build 2>&1 | tee build/logs/build.log
+endif
 
-test: deps ## Match CI: coverage report and test output
+ifneq ($(CI_LOG_INNER),)
+test: deps
 	$(NODE_RUN) sh -eu -c 'mkdir -p build && npm test -- --coverage --reporter=default --reporter=json --outputFile.json=build/test-results.json'
+else
+test: ## Match CI: coverage report and test output
+	@mkdir -p build/logs
+	@set -o pipefail; $(MAKE) --no-print-directory CI_LOG_INNER=1 test 2>&1 | tee build/logs/test.log
+endif
 
 linux-binary: deps ## Build the Linux binary
 	$(NODE_RUN) npm run package:binary
@@ -162,38 +192,39 @@ smoke-linux-binary: linux-binary ## Smoke the Linux binary
 # and a later job must not run npm run build.
 # "build/name.tgz" is a GitHub shorthand to npm, so install and publish use "./".
 # A leading ./ keeps the tarball a local file. The Node image then needs no git.
-npm-package: deps ## Match CI: pack the npm tarball and smoke the packed CLI
-	$(NODE_RUN) sh -eu -c 'if [ ! -f dist/index.html ]; then echo "npm-package needs dist from the build job. It does not compile the UI again."; exit 1; fi; mkdir -p build; npm pack --ignore-scripts --pack-destination build; tgz=$$(echo build/$(NAME)-*.tgz); test -f "$$tgz"; list=$$(mktemp); tar -tzf "$$tgz" > "$$list"; if ! grep -qx package/dist/index.html "$$list"; then echo "The packed app is missing dist/index.html."; exit 1; fi; rm -f "$$list"; stage=$$(mktemp -d); prefix="$$stage/prefix"; npm install -g "./$$tgz" --prefix "$$prefix"; "$$prefix/bin/$(NAME)" --help; node scripts/smoke-binary.mjs "$$prefix/bin/$(NAME)"'
+ifneq ($(CI_LOG_INNER),)
+npm-package: deps
+	$(NODE_RUN) sh -eu -c 'if [ ! -f dist/index.html ]; then echo "npm-package needs dist from the build job. It does not compile the UI again."; exit 1; fi; mkdir -p build build/summaries; npm pack --ignore-scripts --pack-destination build; tgz=$$(echo build/$(NAME)-*.tgz); test -f "$$tgz"; list=$$(mktemp); tar -tzf "$$tgz" > "$$list"; if ! grep -qx package/dist/index.html "$$list"; then echo "The packed app is missing dist/index.html."; exit 1; fi; rm -f "$$list"; stage=$$(mktemp -d); prefix="$$stage/prefix"; npm install -g "./$$tgz" --prefix "$$prefix"; "$$prefix/bin/$(NAME)" --help; node scripts/smoke-binary.mjs "$$prefix/bin/$(NAME)"; { echo "npm-package"; echo; echo "Tarball: $$tgz"; echo "Packed the built app and smoked the CLI."; echo "This tarball is not uploaded to a GitHub release."; } > build/summaries/npm-package.md'
+else
+npm-package: ## Match CI: pack the npm tarball and smoke the packed CLI
+	@mkdir -p build/logs
+	@set -o pipefail; $(MAKE) --no-print-directory CI_LOG_INNER=1 npm-package 2>&1 | tee build/logs/npm-package.log
+endif
 
 pack-smoke: npm-package
 npm-tarball: npm-package
 
-report: ## Match CI: collect coverage and test output; skip when none exist
-	@set -euo pipefail; \
-	results=""; \
-	coverage=""; \
-	for candidate in build/test-results.json build/build/test-results.json; do \
-	  if [ -f "$$candidate" ]; then results="$$candidate"; break; fi; \
-	done; \
-	for candidate in build/coverage build/build/coverage; do \
-	  if [ -d "$$candidate" ]; then coverage="$$candidate"; break; fi; \
-	done; \
-	if [ -z "$$results" ] && [ -z "$$coverage" ]; then \
-	  echo "No coverage report or test output. Skipping."; \
-	  exit 0; \
-	fi; \
-	{ \
-	  echo "# Test report"; \
-	  echo; \
-	  if [ -n "$$results" ]; then echo "Test output: $$results"; fi; \
-	  if [ -n "$$coverage" ]; then echo "Coverage: $$coverage"; fi; \
-	} > build/report.md; \
-	test -s build/report.md; \
-	if [ -n "$${GITHUB_STEP_SUMMARY:-}" ]; then cat build/report.md >> "$$GITHUB_STEP_SUMMARY"; fi; \
-	echo "Wrote build/report.md"
+ifneq ($(CI_LOG_INNER),)
+report:
+	$(NODE_RUN) node scripts/assemble-report.mjs
+	@if [ -n "$${GITHUB_STEP_SUMMARY:-}" ] && [ -f build/report/index.md ]; then cat build/report/index.md >> "$$GITHUB_STEP_SUMMARY"; fi
+	@test -s build/report/index.md
+	@echo "Wrote build/report/index.md"
+else
+report: ## Match CI: collect quality and process into one report
+	@mkdir -p build/logs build/report/logs
+	@set -o pipefail; $(MAKE) --no-print-directory CI_LOG_INNER=1 report 2>&1 | tee build/logs/report.log
+	@cp build/logs/report.log build/report/logs/report.log
+endif
 
-docs: ## Match CI: render docs/ to HTML; skip when none exist
+ifneq ($(CI_LOG_INNER),)
+docs:
 	$(NODE_RUN) node scripts/render-docs.mjs
+else
+docs: ## Match CI: render docs/ to HTML; skip when none exist
+	@mkdir -p build/logs
+	@set -o pipefail; $(MAKE) --no-print-directory CI_LOG_INNER=1 docs 2>&1 | tee build/logs/docs.log
+endif
 
 resolve-ghcr-tags: ## Resolve GHCR tags from the git ref
 	@set -euo pipefail; \
@@ -263,8 +294,29 @@ image-push: ## Push the resolved GHCR tags (refuses when TAGS is empty)
 	done; \
 	test "$$count" -gt 0
 
-publish-container: ## Match CI: push the image saved by build
+ifneq ($(CI_LOG_INNER),)
+publish-container:
+	@mkdir -p build/summaries
 	@set -euo pipefail; \
+	summary=build/summaries/publish-container.md; \
+	image_name="$(IMAGE_NAME)"; \
+	tags=""; \
+	resolver=""; \
+	status="failed"; \
+	reason="publish-container did not finish."; \
+	finish() { \
+	  { \
+	    echo "# publish-container"; \
+	    echo; \
+	    echo "Status: $$status"; \
+	    echo "Image: $$image_name"; \
+	    echo "Tags:"; \
+	    if [ -n "$$tags" ]; then printf '%s\n' "$$tags" | tr ',' '\n' | sed 's/^/- /'; else echo "- none"; fi; \
+	    echo "Reason: $$reason"; \
+	    if [ -n "$$resolver" ]; then echo; echo "Resolver:"; printf '%s\n' "$$resolver"; fi; \
+	  } > "$$summary"; \
+	}; \
+	trap finish EXIT; \
 	if podman image inspect "$(CI_IMAGE)" >/dev/null 2>&1; then \
 	  echo "Using image $(CI_IMAGE)"; \
 	elif [ -f "$(IMAGE_TAR)" ]; then \
@@ -275,61 +327,73 @@ publish-container: ## Match CI: push the image saved by build
 	elif [ "$${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ]; then \
 	  $(MAKE) image; \
 	else \
-	  echo "Missing $(IMAGE_TAR). The build job produces it."; \
+	  reason="Missing $(IMAGE_TAR). The build job produces it."; \
+	  echo "$$reason"; \
 	  exit 1; \
 	fi; \
-	out=$$($(MAKE) -s --no-print-directory resolve-ghcr-tags); \
-	publish=$$(printf '%s\n' "$$out" | sed -n 's/^publish=//p'); \
-	tags=$$(printf '%s\n' "$$out" | sed -n 's/^tags=//p'); \
+	resolver=$$($(MAKE) -s --no-print-directory resolve-ghcr-tags); \
+	publish=$$(printf '%s\n' "$$resolver" | sed -n 's/^publish=//p'); \
+	tags=$$(printf '%s\n' "$$resolver" | sed -n 's/^tags=//p'); \
+	ref="$${GITHUB_REF:-}"; \
+	event="$${GITHUB_EVENT_NAME:-}"; \
+	reason="Resolved tags from $${ref:-unknown}."; \
+	case "$$ref" in \
+	  refs/tags/v*) reason="A v* tag that matches package.json publishes the version, major.minor, major, and latest tags." ;; \
+	  refs/heads/master|refs/heads/main) reason="master or main publishes edge and sha-<commit>." ;; \
+	  *) if [ "$$event" = "workflow_dispatch" ]; then reason="A manual publish-container publishes sha-<commit> from this ref."; fi ;; \
+	esac; \
 	if [ "$$publish" != "true" ]; then \
-	  echo "Refusing to push. Resolved publish=$$publish"; \
+	  status="refused"; \
+	  reason="Refusing to push. Resolved publish=$$publish. $$reason"; \
+	  echo "$$reason"; \
 	  exit 1; \
 	fi; \
-	TAGS="$$tags" $(MAKE) image-push
+	TAGS="$$tags" $(MAKE) image-push; \
+	status="pushed"
+else
+publish-container: ## Match CI: push the image saved by build
+	@mkdir -p build/logs
+	@set -o pipefail; $(MAKE) --no-print-directory CI_LOG_INNER=1 publish-container 2>&1 | tee build/logs/publish-container.log
+endif
 
-publish-npm: ## Match CI: publish the packed tarball (refuses unless NPM_PUBLISH=true)
+ifneq ($(CI_LOG_INNER),)
+publish-npm:
+	@mkdir -p build/summaries
 	@set -euo pipefail; \
+	summary=build/summaries/publish-npm.md; \
+	tgz=""; \
+	status="failed"; \
+	reason="publish-npm did not finish."; \
+	finish() { \
+	  { \
+	    echo "# publish-npm"; \
+	    echo; \
+	    echo "Status: $$status"; \
+	    echo "Tarball: $${tgz:-none}"; \
+	    echo "Reason: $$reason"; \
+	  } > "$$summary"; \
+	}; \
+	trap finish EXIT; \
 	if [ "$(NPM_PUBLISH)" != "true" ]; then \
-	  echo "publish-npm refuses unless NPM_PUBLISH=true."; \
+	  status="refused"; \
+	  reason="publish-npm refuses unless NPM_PUBLISH=true."; \
+	  echo "$$reason"; \
 	  exit 1; \
 	fi; \
 	tgz=$$(echo build/$(NAME)-*.tgz); \
 	if [ ! -f "$$tgz" ]; then \
-	  echo "Missing npm tarball. npm-package produces it."; \
+	  status="refused"; \
+	  reason="Missing npm tarball. npm-package produces it."; \
+	  echo "$$reason"; \
 	  exit 1; \
 	fi; \
-	npm publish "./$$tgz" --access public --provenance
+	npm publish "./$$tgz" --access public --provenance; \
+	status="published"; \
+	reason="NPM_PUBLISH=true. Published the packed tarball to the npm registry."
+else
+publish-npm: ## Match CI: publish the packed tarball (refuses unless NPM_PUBLISH=true)
+	@mkdir -p build/logs
+	@set -o pipefail; $(MAKE) --no-print-directory CI_LOG_INNER=1 publish-npm 2>&1 | tee build/logs/publish-npm.log
+endif
 
 npm-publish: publish-npm
-
-publish-github: ## Match CI: checksums and release notes for the GitHub release
-	@set -euo pipefail; \
-	mkdir -p "$(RELEASE_DIR)/npm-package" build; \
-	tgz=""; \
-	for candidate in \
-	  "$(RELEASE_DIR)"/npm-package/$(NAME)-*.tgz \
-	  build/$(NAME)-*.tgz \
-	  "$(RELEASE_DIR)"/npm-package/build/$(NAME)-*.tgz; \
-	do \
-	  if [ -f "$$candidate" ]; then tgz="$$candidate"; break; fi; \
-	done; \
-	if [ -z "$$tgz" ]; then \
-	  echo "publish-github needs the npm-package tarball. It does not pack again."; \
-	  exit 1; \
-	fi; \
-	canon="$(RELEASE_DIR)/npm-package/$$(basename "$$tgz")"; \
-	if [ "$$tgz" != "$$canon" ]; then cp "$$tgz" "$$canon"; fi; \
-	tgz="$$canon"; \
-	test -f "$$tgz"; \
-	tgz_name=$$(basename "$$tgz"); \
-	sum() { $(SHA256) "$$1" | awk '{print $$1}'; }; \
-	printf '%s  %s\n' "$$(sum "$$tgz")" "$$tgz_name" > build/SHA256SUMS; \
-	if [ "$$(uname -s)" = "Darwin" ]; then \
-	  TGZ_NAME="$$tgz_name" node scripts/release-notes.mjs > build/notes.md; \
-	else \
-	  TGZ_NAME="$$tgz_name" $(NODE_RUN) node scripts/release-notes.mjs > build/notes.md; \
-	fi; \
-	test -s build/notes.md; \
-	echo "Wrote build/SHA256SUMS and build/notes.md"
-
-release-assets: publish-github
