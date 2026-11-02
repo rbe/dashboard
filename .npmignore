@@ -25,7 +25,7 @@ node_modules/
 **/*.test.ts
 scripts/build-binary.mjs
 scripts/container-tags.mjs
-scripts/release-notes.mjs
+scripts/assemble-report.mjs
 scripts/render-docs.mjs
 scripts/sea-main.mjs
 scripts/serve.mjs

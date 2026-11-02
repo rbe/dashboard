@@ -4,7 +4,7 @@ Local markdown dashboard for systems and links. The board is stored in a file on
 
 ## Install
 
-The running app is the container image. A GitHub release attaches the npm tarball.
+The running app is the container image. This repository does not publish a GitHub release.
 
 ### Container
 
@@ -20,12 +20,6 @@ The command is `dashboard`. Install it from a checkout:
 
 ```sh
 npm install -g .
-```
-
-Or from a GitHub release tarball:
-
-```sh
-npm install -g https://github.com/rbe/dashboard/releases/download/v1.0.0/dashboard-1.0.0.tgz
 ```
 
 `npm install -g dashboard` does not install this project. That name on the public npm registry already belongs to a different package. Publishing this package there stays off until the repository variable `NPM_PUBLISH` is `true` and the `NPM_TOKEN` secret is set. A manual run of the `publish-npm` job may publish without that variable.
@@ -56,7 +50,7 @@ make run
 
 Open https://127.0.0.1:4173. `make run` builds the image, starts the container in the background, and `make stop` stops and removes it. The board file is `data/dashboard.md` in this directory, mounted into the container, and the self-signed certificate is written to `data/tls/` there. `make run PORT=9000` listens on that port.
 
-`make help` lists every target. A description that starts with "Match CI" is a job the GitHub workflow runs, so a laptop and CI share one command. Podman is the only container engine. `make ci` runs the jobs through `report` and `docs` on a laptop. It does not publish.
+`make help` lists every target. A description that starts with "Match CI" is a job the GitHub workflow runs, so a laptop and CI share one command. Podman is the only container engine. `make ci` runs the jobs through `docs` and `report` on a laptop. It does not publish.
 
 ## Pipeline
 
@@ -68,21 +62,22 @@ flowchart LR
   setup --> test
   build --> npmPackage["npm-package"]
   test --> npmPackage
-  test --> report
   docs["docs"]
   npmPackage --> publishNpm["publish-npm"]
   test --> publishNpm
-  report --> publishNpm
   build --> publishContainer["publish-container"]
   test --> publishContainer
-  report --> publishContainer
-  npmPackage --> publishGithub["publish-github"]
-  test --> publishGithub
-  report --> publishGithub
+  setup --> report
+  build --> report
+  test --> report
+  npmPackage --> report
+  docs --> report
+  publishNpm --> report
+  publishContainer --> report
 ```
 
-A line is that job's `needs` entry. `build` and `test` both wait for `setup`, then run together. `npm-package` waits for both and packs the `dist` tree `build` uploaded. `report` waits for `test` and collects coverage and test output when `test` wrote them. The `report` job is skipped when those files are absent. A publish job still runs in that case, once its other needs have succeeded. `docs` has no `needs`. It renders `docs/` to HTML beside the other jobs, on every push, and that HTML stays out of the npm package and the image.
+A line is that job's `needs` entry. `build` and `test` both wait for `setup`, then run together. `npm-package` waits for both and packs the `dist` tree `build` uploaded. `docs` has no `needs`. It renders `docs/` to HTML beside the other jobs, on every push, and that HTML stays out of the npm package and the image. `publish-npm` and `publish-container` do not wait for each other. `report` is last. It waits for every other job, then collects make output, script output, test results, coverage, and publish results into one artifact. It still runs when a publish job is skipped.
 
-A push to `master` or `main` runs `setup` through `report`, with `docs` beside that chain, then `publish-container` and `publish-github`. `publish-npm` joins them when the repository variable `NPM_PUBLISH` is `true`. They wait only on the jobs drawn above. Any other branch runs through `report` and does not publish. A tag `vX.Y.Z` that matches `package.json` uses the same publish rule. `publish-container` on `master` or `main` pushes `ghcr.io/rbe/dashboard` as `edge` and `sha-<commit>`. On a `vX.Y.Z` tag it pushes `X.Y.Z`, `X.Y`, `X`, and `latest`. `publish-github` attaches the tarball from `npm-package` to a GitHub release named `master`, `main`, or the `vX.Y.Z` tag. A manual run of `publish-npm` may publish without the `NPM_PUBLISH` variable. **Run workflow** starts the one selected job on the chosen branch, including a publish job, and that manual publish may push. Choosing `publish-npm` or `publish-github` also runs `setup`, `build`, `test`, and `npm-package`. Choosing `publish-container` also runs `setup`, `build`, and `test`. Those manual publish runs leave `report` skipped. Choosing `report` alone does not run `test`, so `report` stays skipped. A manual `publish-container` on `master` or `main` pushes `:edge` and `:sha-<commit>`. A manual run on any other branch pushes `:sha-<commit>`. A manual run on a `vX.Y.Z` tag pushes the version tags.
+A push to `master` or `main` runs `setup` through `npm-package`, with `docs` beside that chain, then `publish-container`. `publish-npm` joins it when the repository variable `NPM_PUBLISH` is `true`. `report` runs after those publish jobs. Any other branch stops before publish. `report` still runs. A tag `vX.Y.Z` that matches `package.json` uses the same publish rule. Delivery is the container image. This repository does not publish a GitHub release, and it does not upload an npm tarball, image archive, checksums, or source to one. `publish-container` on `master` or `main` pushes `ghcr.io/rbe/dashboard` as `edge` and `sha-<commit>`. On a `vX.Y.Z` tag it pushes `X.Y.Z`, `X.Y`, `X`, and `latest`. `publish-npm` publishes the tarball from `npm-package` when `NPM_PUBLISH` is `true`. A manual run of `publish-npm` may publish without that variable. **Run workflow** starts the one selected job on the chosen branch, and that manual publish may push. Choosing `publish-npm` also runs `setup`, `build`, `test`, and `npm-package`. Choosing `publish-container` also runs `setup`, `build`, and `test`, and that run publishes the image. Choosing `report` runs `setup`, `build`, `test`, `npm-package`, and `docs`, and does not publish. `report` then writes the artifact. A manual `publish-container` on `master` or `main` pushes `:edge` and `:sha-<commit>`. A manual run on any other branch pushes `:sha-<commit>`. A manual run on a `vX.Y.Z` tag pushes the version tags.
 
 The workflow and the image use Node 24. `make image` passes that same major into the image.

@@ -21,6 +21,7 @@ describe('render docs', () => {
       writeFileSync(path.join(source, 'guide', 'start.md'), '# Start\n\nHello `there`.\n\n- one\n')
       const output = render(source, out)
       expect(output).toContain('Rendered 1 docs')
+      expect(readFileSync(path.join(root, 'summaries', 'docs.md'), 'utf8')).toContain('guide/start.md')
       const page = readFileSync(path.join(out, 'guide', 'start.html'), 'utf8')
       expect(page).toContain('<h1>Start</h1>')
       expect(page).toContain('<code>there</code>')
@@ -57,6 +58,7 @@ describe('render docs', () => {
       const output = render(source, out)
       expect(output).toContain('No docs to render. Skipping.')
       expect(existsSync(out)).toBe(false)
+      expect(readFileSync(path.join(root, 'summaries', 'docs.md'), 'utf8')).toContain('No docs to render.')
     } finally {
       rmSync(root, { recursive: true, force: true })
     }

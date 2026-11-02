@@ -32,7 +32,7 @@ export default defineConfig({
     include: ['src/**/*.test.ts', 'scripts/**/*.test.mjs'],
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'json', 'lcov'],
+      reporter: ['text', 'json', 'json-summary', 'lcov'],
       reportsDirectory: 'build/coverage',
       include: ['src/**', 'scripts/**'],
       exclude: ['**/*.test.*'],
