@@ -1,123 +1,68 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { containerfileNodeVersion, formatGithubOutput, resolveImageTags } from './container-tags.mjs'
-
-const sha = '0123456789abcdef0123456789abcdef01234567'
+import { containerfileNodeVersion, formatGithubOutput, requireBuild, resolveImageTags, versionFromGitTag } from './container-tags.mjs'
 
 describe('container image tags', () => {
-  it('publishes a release tag that matches package.json', () => {
+  it('publishes the nearest release as version-run and latest', () => {
     const result = resolveImageTags({
       imageName: 'ghcr.io/Rbe/Dashboard',
-      ref: 'refs/tags/v1.2.3',
-      refName: 'v1.2.3',
-      sha,
-      version: '1.2.3',
+      version: versionFromGitTag('v1.2.3'),
+      build: '42',
     })
     expect(result.publish).toBe(true)
+    expect(result.version).toBe('1.2.3')
+    expect(result.build).toBe('42')
     expect(result.image).toBe('ghcr.io/rbe/dashboard')
     expect(result.tags).toEqual([
-      'ghcr.io/rbe/dashboard:1.2.3',
-      'ghcr.io/rbe/dashboard:1.2',
-      'ghcr.io/rbe/dashboard:1',
+      'ghcr.io/rbe/dashboard:1.2.3-42',
       'ghcr.io/rbe/dashboard:latest',
     ])
+    expect(formatGithubOutput(result)).toContain('publish=true')
+    expect(formatGithubOutput(result)).toContain('tags=ghcr.io/rbe/dashboard:1.2.3-42,ghcr.io/rbe/dashboard:latest')
+    expect(result.tags.some((tag) => tag.endsWith(':edge') || tag.includes('sha-'))).toBe(false)
+    expect(result.tags).not.toContain('ghcr.io/rbe/dashboard:1.2.3')
   })
 
-  it('rejects a tag that does not match package.json', () => {
-    expect(() =>
-      resolveImageTags({
-        imageName: 'ghcr.io/rbe/dashboard',
-        ref: 'refs/tags/v1.2.3',
-        refName: 'v1.2.3',
-        sha,
-        version: '1.0.0',
-      }),
-    ).toThrow(/does not match/)
+  it('strips a leading v and rejects tags that are not MAJOR.MINOR.PATCH', () => {
+    expect(versionFromGitTag('v1.0.0')).toBe('1.0.0')
+    expect(() => versionFromGitTag('')).toThrow(/Refusing to invent a version/)
+    expect(() => versionFromGitTag('1.0.0')).toThrow(/not vMAJOR.MINOR.PATCH/)
+    expect(() => versionFromGitTag('v1.0')).toThrow(/not vMAJOR.MINOR.PATCH/)
+    expect(() => versionFromGitTag('v1.0.0-rc.1')).toThrow(/not vMAJOR.MINOR.PATCH/)
   })
 
-  it('publishes edge and a commit tag from main', () => {
-    const result = resolveImageTags({
+  it('requires the GitHub run number and does not invent a build', () => {
+    expect(requireBuild('7')).toBe('7')
+    expect(() => requireBuild('')).toThrow(/Refusing to invent a build number/)
+    expect(() => requireBuild('0')).toThrow(/Refusing to invent a build number/)
+    expect(() => requireBuild('01')).toThrow(/Refusing to invent a build number/)
+    expect(() => requireBuild('abc')).toThrow(/Refusing to invent a build number/)
+    expect(() => resolveImageTags({
       imageName: 'ghcr.io/rbe/dashboard',
-      ref: 'refs/heads/main',
-      refName: 'main',
-      sha,
       version: '1.0.0',
-    })
-    expect(result.publish).toBe(true)
-    expect(result.tags).toEqual([
-      'ghcr.io/rbe/dashboard:edge',
-      'ghcr.io/rbe/dashboard:sha-0123456789ab',
-    ])
+      build: '',
+    })).toThrow(/Refusing to invent a build number/)
   })
 
-  it('does not publish a feature branch push', () => {
-    const result = resolveImageTags({
+  it('fails instead of inventing a version', () => {
+    expect(() => resolveImageTags({
       imageName: 'ghcr.io/rbe/dashboard',
-      ref: 'refs/heads/feature/pipeline',
-      refName: 'feature/pipeline',
-      sha,
-      version: '1.0.0',
-      event: 'push',
-    })
-    expect(result.publish).toBe(false)
-    expect(result.tags).toEqual([])
+      version: '',
+      build: '7',
+    })).toThrow(/Refusing to invent a version/)
+    expect(() => resolveImageTags({
+      imageName: 'ghcr.io/rbe/dashboard',
+      version: '1.0.0-rc.1',
+      build: '7',
+    })).toThrow(/Refusing to invent a version/)
   })
 
-  it('publishes edge and a commit tag from master', () => {
-    const result = resolveImageTags({
-      imageName: 'ghcr.io/rbe/dashboard',
-      ref: 'refs/heads/master',
-      refName: 'master',
-      sha,
-      version: '1.0.0',
-    })
-    expect(result.publish).toBe(true)
-    expect(result.tags).toEqual([
-      'ghcr.io/rbe/dashboard:edge',
-      'ghcr.io/rbe/dashboard:sha-0123456789ab',
-    ])
-  })
-
-  it('publishes a commit tag from a manual run of another branch', () => {
-    const result = resolveImageTags({
-      imageName: 'ghcr.io/rbe/dashboard',
-      ref: 'refs/heads/feature/pipeline',
-      refName: 'feature/pipeline',
-      sha,
-      version: '1.0.0',
-      event: 'workflow_dispatch',
-    })
-    expect(result.publish).toBe(true)
-    expect(result.tags).toEqual(['ghcr.io/rbe/dashboard:sha-0123456789ab'])
-  })
-
-  it('keeps the master edge tags when a manual run is on master', () => {
-    const result = resolveImageTags({
-      imageName: 'ghcr.io/rbe/dashboard',
-      ref: 'refs/heads/master',
-      refName: 'master',
-      sha,
-      version: '1.0.0',
-      event: 'workflow_dispatch',
-    })
-    expect(result.publish).toBe(true)
-    expect(result.tags).toEqual([
-      'ghcr.io/rbe/dashboard:edge',
-      'ghcr.io/rbe/dashboard:sha-0123456789ab',
-    ])
-  })
-
-  it('does not publish pull requests', () => {
-    const result = resolveImageTags({
-      imageName: 'ghcr.io/rbe/dashboard',
-      ref: 'refs/pull/9/merge',
-      refName: '9/merge',
-      sha,
-      version: '1.0.0',
-    })
-    expect(result.publish).toBe(false)
-    expect(result.tags).toEqual([])
-    expect(formatGithubOutput(result)).toContain('publish=false')
-    expect(formatGithubOutput(result)).toContain('tags=\n')
+  it('does not publish an edge tag or a sha tag', () => {
+    const source = readFileSync(new URL('./container-tags.mjs', import.meta.url), 'utf8')
+    expect(source).not.toContain('edge')
+    expect(source).not.toContain('sha-')
+    expect(source).toContain('GIT_TAG')
+    expect(source).toContain('GITHUB_RUN_NUMBER')
   })
 
   it('reads NODE_VERSION from the Containerfile', () => {

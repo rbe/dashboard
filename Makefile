@@ -5,6 +5,7 @@
 #
 # Targets whose descriptions start with "Match CI" are the jobs the
 # GitHub workflow runs. Each job calls the target with the same name.
+# The publish-container job also calls prune-package-versions after the push.
 # Podman is the only container engine.
 #
 # setup, build, and test run through Podman, so macOS and Linux run the
@@ -43,7 +44,7 @@ NODE_RUN_OPTS = --rm -e HOME=/tmp -e npm_config_cache=/tmp/npm-cache -e npm_conf
 NODE_RUN = podman run $(NODE_RUN_OPTS) $(NODE_IMAGE)
 
 .DEFAULT_GOAL := help
-.PHONY: help image run stop ci host-checks setup deps check-tag npm-ci audit build test linux-binary smoke-linux-binary report docs resolve-ghcr-tags ci-image smoke-image image-save image-load image-push publish-container
+.PHONY: help image run stop ci host-checks setup deps check-tag npm-ci audit build test linux-binary smoke-linux-binary report docs git-version resolve-ghcr-tags ci-image smoke-image image-save image-load image-push publish-container prune-package-versions
 
 help: ## Show this help
 	@echo "Host requirements for image, run, and stop: Podman and make."
@@ -54,6 +55,7 @@ help: ## Show this help
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-24s %s\n", $$1, $$2}'
 	@echo
 	@echo "Descriptions that start with \"Match CI\" are the jobs the GitHub workflow runs."
+	@echo "After a successful publish-container push, prune-package-versions keeps that package version and one former."
 	@echo "Podman is the only container engine, on a laptop and in CI."
 	@echo "make ci runs setup, build, test, docs, and report. It does not publish."
 	@echo "make run builds the image if needed and listens on https://127.0.0.1:$(PORT)."
@@ -196,13 +198,27 @@ docs: ## Match CI: render docs/ to HTML; skip when none exist
 	@set -o pipefail; $(MAKE) --no-print-directory CI_LOG_INNER=1 docs 2>&1 | tee build/logs/docs.log
 endif
 
-resolve-ghcr-tags: ## Resolve GHCR tags from the git ref
+git-version: ## Print the nearest v* tag on HEAD, or fail if none
 	@set -euo pipefail; \
+	tag=""; \
+	if ! tag=$$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null); then \
+	  echo "No v* tag describes HEAD. Refusing to invent a version." >&2; \
+	  exit 1; \
+	fi; \
+	printf '%s\n' "$$tag"
+
+resolve-ghcr-tags: ## Resolve GHCR tags from the nearest v* tag and the GitHub run number
+	@set -euo pipefail; \
+	tag=$$($(MAKE) -s --no-print-directory git-version); \
+	if [ -z "$${GITHUB_RUN_NUMBER:-}" ]; then \
+	  echo "GITHUB_RUN_NUMBER is required and must be a positive integer. Refusing to invent a build number." >&2; \
+	  exit 1; \
+	fi; \
 	extra=""; \
 	if [ -n "$${GITHUB_OUTPUT:-}" ]; then \
 	  extra="-v $${GITHUB_OUTPUT}:$${GITHUB_OUTPUT}"; \
 	fi; \
-	podman run $(NODE_RUN_OPTS) $$extra $(NODE_IMAGE) node scripts/container-tags.mjs
+	podman run $(NODE_RUN_OPTS) -e GIT_TAG="$$tag" -e GITHUB_RUN_NUMBER $$extra $(NODE_IMAGE) node scripts/container-tags.mjs
 
 ci-image: smoke-image ## Build the image once, then smoke it
 
@@ -304,14 +320,10 @@ publish-container:
 	resolver=$$($(MAKE) -s --no-print-directory resolve-ghcr-tags); \
 	publish=$$(printf '%s\n' "$$resolver" | sed -n 's/^publish=//p'); \
 	tags=$$(printf '%s\n' "$$resolver" | sed -n 's/^tags=//p'); \
+	version=$$(printf '%s\n' "$$resolver" | sed -n 's/^version=//p'); \
+	build=$$(printf '%s\n' "$$resolver" | sed -n 's/^build=//p'); \
 	ref="$${GITHUB_REF:-}"; \
-	event="$${GITHUB_EVENT_NAME:-}"; \
-	reason="Resolved tags from $${ref:-unknown}."; \
-	case "$$ref" in \
-	  refs/tags/v*) reason="A v* tag that matches package.json publishes the version, major.minor, major, and latest tags." ;; \
-	  refs/heads/master|refs/heads/main) reason="master or main publishes edge and sha-<commit>." ;; \
-	  *) if [ "$$event" = "workflow_dispatch" ]; then reason="A manual publish-container publishes sha-<commit> from this ref."; fi ;; \
-	esac; \
+	reason="Tags are $${version}-$${build} and latest from $${ref:-unknown}. The version is the nearest v* tag with the leading v removed. The build is the GitHub run number. latest is that same image, not another package version."; \
 	if [ "$$publish" != "true" ]; then \
 	  status="refused"; \
 	  reason="Refusing to push. Resolved publish=$$publish. $$reason"; \
@@ -321,9 +333,53 @@ publish-container:
 	TAGS="$$tags" $(MAKE) image-push; \
 	status="pushed"
 else
-publish-container: ## Match CI: push the image saved by build
+publish-container: ## Match CI: push the version-run tag and latest
 	@mkdir -p build/logs
 	@set -o pipefail; $(MAKE) --no-print-directory CI_LOG_INNER=1 publish-container 2>&1 | tee build/logs/publish-container.log
+endif
+
+ifneq ($(CI_LOG_INNER),)
+prune-package-versions:
+	@mkdir -p build/summaries
+	@set -euo pipefail; \
+	summary=build/summaries/prune-package-versions.md; \
+	status="failed"; \
+	kept="0"; \
+	deleted="0"; \
+	reason="prune-package-versions did not finish."; \
+	finish() { \
+	  { \
+	    echo "# prune-package-versions"; \
+	    echo; \
+	    echo "Status: $$status"; \
+	    echo "Kept: $$kept"; \
+	    echo "Deleted: $$deleted"; \
+	    echo "Reason: $$reason"; \
+	  } > "$$summary"; \
+	}; \
+	trap finish EXIT; \
+	tag=$$($(MAKE) -s --no-print-directory git-version); \
+	output=""; \
+	if ! output=$$(podman run $(NODE_RUN_OPTS) -e GHCR_TOKEN -e GITHUB_TOKEN -e GIT_TAG="$$tag" -e GITHUB_RUN_NUMBER $(NODE_IMAGE) node scripts/prune-package-versions.mjs); then \
+	  printf '%s\n' "$$output"; \
+	  parsed=$$(printf '%s\n' "$$output" | sed -n 's/^reason=//p'); \
+	  if [ -n "$$parsed" ]; then reason="$$parsed"; fi; \
+	  exit 1; \
+	fi; \
+	printf '%s\n' "$$output"; \
+	status=$$(printf '%s\n' "$$output" | sed -n 's/^status=//p'); \
+	kept=$$(printf '%s\n' "$$output" | sed -n 's/^kept=//p'); \
+	deleted=$$(printf '%s\n' "$$output" | sed -n 's/^deleted=//p'); \
+	parsed=$$(printf '%s\n' "$$output" | sed -n 's/^reason=//p'); \
+	if [ -n "$$parsed" ]; then reason="$$parsed"; fi; \
+	case "$$status" in \
+	  kept|deleted) ;; \
+	  *) status="failed"; reason="Unexpected prune status."; exit 1 ;; \
+	esac
+else
+prune-package-versions: ## Delete older GHCR package versions; keep the current version and one former
+	@mkdir -p build/logs
+	@set -o pipefail; $(MAKE) --no-print-directory CI_LOG_INNER=1 prune-package-versions 2>&1 | tee build/logs/prune-package-versions.log
 endif
 
 ifneq ($(CI_LOG_INNER),)
