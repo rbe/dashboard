@@ -25,7 +25,7 @@ Packages and images leave out `.claude/`, `AGENTS.md`, and `docs/`.
 
 ## Notes
 
+- [Waves](docs/WAVES.md)
+- [Features](docs/FEATURES.md)
+- [Bugs](docs/BUGS.md)
 - [Pipeline rules](docs/pipeline-rules.md)
-- [Bugs](BUGS.md)
-- [Waves](WAVES.md)
-- [Features](FEATURES.md)

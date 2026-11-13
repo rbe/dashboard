@@ -1,8 +1,7 @@
 node_modules
 dist
 build
-ci-artifacts
-release
+
+.idea/
+
 .DS_Store
-*.local
-dashboard-image.tar
