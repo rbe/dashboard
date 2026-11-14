@@ -1,7 +1,11 @@
 node_modules
 dist
 build
+ci-artifacts
+release
+*-image.tar
 
 .idea/
 
 .DS_Store
+*.local
