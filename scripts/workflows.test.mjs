@@ -4,7 +4,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-const SDLC_MK_SHA256 = '9796e280095031c655d3e7f409db2abcc547fcf9067da3dc2c0da926e1c03bc7'
+const SDLC_MK_SHA256 = '45c6cf23664d030c61f0fedd2d0639cd9dc2dc7bb03c14167dce61fed9d495d6'
 
 const workflowDir = new URL('../.github/workflows/', import.meta.url)
 const jobNames = [
@@ -159,6 +159,7 @@ describe('workflow', () => {
     expect(source).not.toMatch(/^ {2}VERSION:/m)
     expect(source).not.toContain(pkg.version)
     expect(source).toContain('NODE_VERSION: "24"')
+    expect(source).toContain('SDLC_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}')
     expect(source).toContain('actions/checkout@v7')
     expect(source).toContain('actions/upload-artifact@v7')
     expect(source).toContain('actions/download-artifact@v8')
@@ -465,7 +466,7 @@ describe('Makefile CI targets', () => {
     expect(sdlc.toString('utf8')).toContain('tee build/logs/$(1).log')
   })
 
-  it('builds the CI image once, smokes it, and publishes version-run plus latest', () => {
+  it('builds the CI image once, smokes it, and publishes the lines from publish-tags', () => {
     expect(source).toContain('smoke-image: image')
     expect(source).not.toMatch(/^ci-image:/m)
     const image = targetChunk(source, 'image')
@@ -481,7 +482,9 @@ describe('Makefile CI targets', () => {
     expect(publish).toContain('$(THIS_MAKE) -s --no-print-directory version')
     expect(publish).toContain('build/publish-version.txt')
     expect(publish).toContain('podman push "$(IMAGE):$$tag"')
-    expect(publish).toContain('for tag in "$$version" latest')
+    expect(publish).toContain('$(THIS_MAKE) -s --no-print-directory publish-tags')
+    expect(publish).toContain('for tag in $$tags')
+    expect(publish).not.toContain('for tag in "$$version" latest')
     expect(publish).not.toContain('podman build')
     expect(publish).not.toContain('sha-')
     expect(publish).not.toMatch(/\bedge\b/)
@@ -528,6 +531,10 @@ describe('pipeline docs', () => {
       expect(text).toContain('cleanup-container-versions')
       expect(text).not.toContain('prune-package-versions')
       expect(text).toContain('exactly one former')
+      expect(text).toContain('next-lower')
+      expect(text).toContain('tags the version only')
+      expect(text).toContain('empty list')
+      expect(text).toContain('MAJOR.MINOR.PATCH-<run>')
       expect(text).toContain('GitHub run number')
       expect(text).toContain('nearest v* tag')
       expect(text).toContain('does not invent a version')
