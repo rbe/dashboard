@@ -55,7 +55,7 @@ login: ## Match CI: log in to ghcr.io with REGISTRY_USER and REGISTRY_TOKEN
 	test -n "$${REGISTRY_TOKEN:-}" || { echo "login needs REGISTRY_TOKEN" >&2; exit 1; }; \
 	printf '%s\n' "$$REGISTRY_TOKEN" | podman login ghcr.io --username "$$REGISTRY_USER" --password-stdin
 
-publish-container: ## Match CI: push MAJOR.MINOR.PATCH-run and latest
+publish-container: ## Match CI: push the version, and latest on the default branch
 	@$(call SDLC_LOG,publish-container,_publish-container)
 
 npm-ci: ## npm ci inside the Node image
@@ -162,8 +162,10 @@ _publish-container:
 	version=$$($(THIS_MAKE) -s --no-print-directory version); \
 	mkdir -p build; \
 	printf '%s\n' "$$version" > build/publish-version.txt; \
-	for tag in "$$version" latest; do \
+	tags=$$($(THIS_MAKE) -s --no-print-directory publish-tags); \
+	for tag in $$tags; do \
 	  podman tag "$(CI_IMAGE)" "$(IMAGE):$$tag"; \
 	  podman push "$(IMAGE):$$tag"; \
 	done; \
-	printf '# publish-container\n\nStatus: pushed\nImage: %s\nTags:\n- %s\n- latest\n' "$(IMAGE)" "$$version" > build/summaries/publish-container.md
+	shown=$$(printf '%s\n' "$$tags" | sed 's/^/- /'); \
+	printf '# publish-container\n\nStatus: pushed\nImage: %s\nTags:\n%s\n' "$(IMAGE)" "$$shown" > build/summaries/publish-container.md
