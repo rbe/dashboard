@@ -4,7 +4,7 @@ Local markdown dashboard for systems and links. The board is stored in a file on
 
 ## Install
 
-The running app is the container image. This repository does not publish a GitHub release.
+The running app is the container image. The app pipeline does not publish a GitHub release.
 
 ### Container
 
@@ -22,7 +22,7 @@ The command is `dashboard`. Install it from a checkout:
 npm install -g .
 ```
 
-`npm install -g dashboard` does not install this project. That name on the public npm registry already belongs to a different package. This repository does not publish an npm package.
+`npm install -g dashboard` does not install this project. That name on the public npm registry already belongs to a different package. This repository does not publish the `dashboard` command. The HTTP client is a separate package, `@rbe/dashboard-client`, published to GitHub Packages.
 
 ## Run from a checkout
 
@@ -40,6 +40,22 @@ dashboard --port 4173 --file data/dashboard.md
 
 `PORT` and `DASHBOARD_FILE` set the same values. The default file is `data/dashboard.md` in the current directory.
 
+## HTTP API
+
+`GET` and `PUT /api/dashboard` read and replace the board file. The contract is [shared/openapi.json](shared/openapi.json). Generated types are [shared/schema.ts](shared/schema.ts). The API has no authentication. The server listens on 127.0.0.1 unless `--host` is set. The Podman server uses a self-signed certificate; pass that PEM as `ca` when calling it from Node.
+
+After the first `client-v*` release, another repository depends on the client with:
+
+```json
+"@rbe/dashboard-client": "1.0.0"
+```
+
+GitHub Packages needs this in the consuming project's `.npmrc`:
+
+```
+@rbe:registry=https://npm.pkg.github.com
+```
+
 ## Podman
 
 Podman and make are enough to build and run the app. Node.js and TypeScript are not required on the host; the image installs them and compiles the UI.
@@ -54,7 +70,7 @@ Open https://127.0.0.1:4173. `make run` builds the image, starts the container i
 
 ## Pipeline
 
-Job rules are in [docs/pipeline-rules.md](docs/pipeline-rules.md). Podman and make are enough to set the app up. `make setup` checks that a `v*` tag matches `package.json`, installs dependencies with `npm ci` in the Node 24 image, and runs `npm audit` as a warning. It saves `node_modules` for the jobs that follow. The only workflow is `.github/workflows/ci.yml`. Each job runs the Makefile target with the same name. `publish-container` then runs `prune-package-versions`. The image name `ghcr.io/rbe/dashboard` and the package version are workflow variables.
+Job rules are in [docs/pipeline-rules.md](docs/pipeline-rules.md). Podman and make are enough to set the app up. `make setup` checks that a `v*` tag matches `package.json`, installs dependencies with `npm ci` in the Node 24 image, and runs `npm audit` as a warning. It saves `node_modules` for the jobs that follow. The app workflow is `.github/workflows/ci.yml`. Each job runs the Makefile target with the same name. `.github/workflows/publish-client.yml` publishes the TypeScript client and does not call the Makefile. `publish-container` then runs `prune-package-versions`. The image name `ghcr.io/rbe/dashboard` and the package version are workflow variables.
 
 ```mermaid
 flowchart LR
@@ -72,6 +88,6 @@ flowchart LR
 
 A line is that job's `needs` entry. `build`, `test`, and `docs` each wait for `setup`, then run together. `docs` needs only `setup`. It renders `docs/` to HTML beside `build` and `test`, on every push, and that HTML stays out of the image. `publish-container` waits for `build` and `test`. It pushes the image `build` saved. `report` is last. It waits for `publish-container` and the jobs before it, then collects make output, script output, test results, coverage, and publish results into one artifact. It still runs when `publish-container` is skipped or fails.
 
-A push to `master` or `main` runs `setup`, then `build`, `test`, and `docs` together, then `publish-container`, then `report`. Any other branch skips `publish-container`. `report` still runs. A tag `vX.Y.Z` runs through `report` and does not publish. Delivery is the container image. This repository does not publish a GitHub release. When `publish-container` runs, it pushes `ghcr.io/rbe/dashboard:<version>-<run>` and `ghcr.io/rbe/dashboard:latest`. `<version>` is the nearest v* tag on the commit with the leading `v` removed, and `<run>` is the GitHub run number. It does not push `edge` or `sha-<commit>`. If no `vMAJOR.MINOR.PATCH` tag describes the commit, the publish fails and does not invent a version. After that push succeeds, `prune-package-versions` keeps the current published version and exactly one former, and deletes every older package version. `latest` is a tag on the newest version, not another package version. A skipped or failed publish deletes nothing. **Run workflow** starts the one selected job on the chosen branch, and that manual publish may push. Choosing `publish-container` also runs `setup`, `build`, and `test`, and that run publishes the image with the same tags. Choosing `report` runs `setup`, `build`, `test`, and `docs`, and does not publish. `report` then writes the artifact.
+A push to `master` or `main` runs `setup`, then `build`, `test`, and `docs` together, then `publish-container`, then `report`. Any other branch skips `publish-container`. `report` still runs. A tag `vX.Y.Z` runs through `report` and does not publish. Delivery of the app is the container image. The app pipeline does not publish a GitHub release. A tag `client-vX.Y.Z` is the client workflow, not this one. When `publish-container` runs, it pushes `ghcr.io/rbe/dashboard:<version>-<run>` and `ghcr.io/rbe/dashboard:latest`. `<version>` is the nearest v* tag on the commit with the leading `v` removed, and `<run>` is the GitHub run number. It does not push `edge` or `sha-<commit>`. If no `vMAJOR.MINOR.PATCH` tag describes the commit, the publish fails and does not invent a version. After that push succeeds, `prune-package-versions` keeps the current published version and exactly one former, and deletes every older package version. `latest` is a tag on the newest version, not another package version. A skipped or failed publish deletes nothing. **Run workflow** starts the one selected job on the chosen branch, and that manual publish may push. Choosing `publish-container` also runs `setup`, `build`, and `test`, and that run publishes the image with the same tags. Choosing `report` runs `setup`, `build`, `test`, and `docs`, and does not publish. `report` then writes the artifact.
 
 The workflow and the image use Node 24. `make image` passes that same major into the image.

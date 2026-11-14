@@ -1,0 +1,156 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Dashboard",
+    "version": "1.0.0",
+    "description": "HTTP API for the local markdown dashboard. Callers are machines on the same network as the server. This API has no authentication. The process listens on 127.0.0.1 unless --host is set, and the Podman server uses a self-signed certificate."
+  },
+  "servers": [
+    {
+      "url": "https://127.0.0.1:4173",
+      "description": "Podman or preview server"
+    },
+    {
+      "url": "http://127.0.0.1:5173",
+      "description": "Vite dev server"
+    }
+  ],
+  "security": [],
+  "paths": {
+    "/api/dashboard": {
+      "get": {
+        "operationId": "getDashboard",
+        "summary": "Read the board file",
+        "responses": {
+          "200": {
+            "description": "The board markdown and the file path on the server.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardFile"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The board file could not be read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadFailed"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "putDashboard",
+        "summary": "Replace the board file",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DashboardWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The board was saved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardSaved"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body was not JSON, was too large to read, or was not markdown the server can store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteFailed"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "DashboardFile": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "markdown"],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "markdown": {
+            "type": "string"
+          }
+        }
+      },
+      "DashboardWrite": {
+        "type": "object",
+        "required": ["markdown"],
+        "properties": {
+          "markdown": {
+            "type": "string",
+            "maxLength": 1000000
+          }
+        }
+      },
+      "DashboardSaved": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ok"],
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "enum": [true]
+          }
+        }
+      },
+      "ReadFailed": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "string",
+            "enum": ["read-failed"]
+          }
+        }
+      },
+      "WriteFailed": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "string",
+            "enum": ["invalid-json", "invalid-markdown", "invalid-body"]
+          }
+        }
+      },
+      "MethodNotAllowed": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "string",
+            "enum": ["method"]
+          }
+        }
+      }
+    }
+  }
+}

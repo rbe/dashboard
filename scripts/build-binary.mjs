@@ -90,7 +90,7 @@ async function main() {
   const esbuild = await import('esbuild')
   const bundled = path.join(buildDir, 'sea-main.cjs')
   await esbuild.build({
-    entryPoints: [path.join(root, 'scripts/sea-main.mjs')],
+    entryPoints: [path.join(root, 'server/sea-main.mjs')],
     bundle: true,
     platform: 'node',
     format: 'cjs',

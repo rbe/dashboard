@@ -1,0 +1,48 @@
+# Publish the TypeScript client. This is not the app pipeline.
+# It packs @rbe/dashboard-client, creates a GitHub Release, and publishes
+# the package to GitHub Packages. It does not build or push the container image.
+# workflow_dispatch and a tag client-v* both publish. The tag must match
+# client/package.json. A mismatch fails and does not invent a version.
+
+name: Publish client
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'client-v*'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          registry-url: https://npm.pkg.github.com
+          scope: "@rbe"
+      - name: Install, test, pack, release, and publish
+        working-directory: client
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          tag="client-v${version}"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "$tag" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match client package version ${version}. Refusing to invent a version."
+            exit 1
+          fi
+          npm ci
+          npm test
+          npm pack
+          gh release create "$tag" --title "@rbe/dashboard-client ${version}" --notes "Typed HTTP client for the dashboard API." ./*.tgz
+          npm publish

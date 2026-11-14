@@ -1,6 +1,6 @@
 # Pipeline rules
 
-This repository has one workflow, `.github/workflows/ci.yml`. A job calls the Makefile target with the same name.
+The app pipeline is `.github/workflows/ci.yml`. A job calls the Makefile target with the same name. The client package is published by `.github/workflows/publish-client.yml`. That workflow does not call the Makefile and does not build the container image.
 
 ## Jobs
 
@@ -17,7 +17,7 @@ In file order:
 
 `publish-container` needs `build` and `test`. It runs only after both succeed. It pushes the image `build` saved. It runs on a push to `master` or `main`, and when `workflow_dispatch` selects it. Any other branch skips it. The same job then runs `prune-package-versions`. That keeps the current published version and exactly one former, and deletes every older package version of `ghcr.io/rbe/dashboard`. If only one version exists, it deletes nothing. `latest` is a tag on the newest version, not another package version. The cleanup uses the GitHub token already used to log in. A skipped or failed publish deletes nothing.
 
-Delivery is the container image. This repository does not publish a GitHub release.
+Delivery of the app is the container image. The app pipeline does not publish a GitHub release. `publish-client.yml` packs `@rbe/dashboard-client`, creates a GitHub Release, and publishes that package to GitHub Packages. It runs on `workflow_dispatch` and on tags `client-v*`. The tag must match `client/package.json`. If it does not, the workflow fails and does not invent a version.
 
 `report` is the last job. It needs `setup`, `build`, `test`, `docs`, and `publish-container`. It still runs when `publish-container` succeeds, fails, or is skipped. The report artifact holds make output, script output, test results, coverage, and publish results: image tags, what was pushed or skipped, and why. Open `index.md` in that artifact.
 
