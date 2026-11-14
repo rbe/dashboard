@@ -1,67 +1,55 @@
 # One pipeline. Delivery is the container image.
-# Jobs: setup, then build, test, and docs together (each needs setup),
-# then publish-container (needs build and test), then report.
-# publish-container runs on a push to master or main, and when
-# workflow_dispatch selects it. Any other branch skips it.
-# A successful push tags <version>-<run> and latest. <version> is the
-# nearest v* tag with the leading v removed. <run> is the GitHub run number.
-# The same job then keeps that package version and one former, and deletes
-# older package versions. A skipped or failed publish deletes nothing.
-# report is last. It still runs when publish-container is skipped or fails.
-# workflow_dispatch starts the one selected job. A manual publish-container
-# also runs setup, build, and test, and that manual publish may push.
-# There is no pull_request trigger, so a same-repo branch is not run twice.
+# Jobs: setup, then build, test, and docs beside each other, then
+# publish-container (needs build and test), then report.
+# publish-container runs on a push to the default branch (master) and when
+# workflow_dispatch selects it. A tag push does not start a run; after
+# tagging vX.Y.Z, dispatch publish-container. Any other branch skips it.
+# The push tags <X.Y.Z>-<run> and latest, then keeps that package version
+# and exactly one former. A skipped or failed publish deletes nothing.
+# report is last and still runs when an earlier job fails or is skipped.
+# Every step is checkout, artifact transfer, or make. Registry login is make login.
 
 name: CI
 
 on:
   push:
-    branches:
-      - '**'
-    tags:
-      - 'v*.*.*'
+    branches: ['**']
   workflow_dispatch:
     inputs:
       job:
-        description: Job to run
+        description: Job to run (with the jobs it needs, then report)
         required: true
         type: choice
-        options:
-          - setup
-          - build
-          - test
-          - docs
-          - publish-container
-          - report
+        options: [setup, build, test, docs, publish-container, report]
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'push' && github.ref_type == 'branch' }}
+  cancel-in-progress: ${{ github.event_name == 'push' && github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
 
 permissions:
   contents: read
 
 env:
   IMAGE_NAME: ghcr.io/rbe/dashboard
-  VERSION: "1.0.0"
   NODE_VERSION: "24"
 
 jobs:
   setup:
-    if: >-
-      github.event_name != 'workflow_dispatch' ||
-      inputs.job == 'setup' ||
-      inputs.job == 'publish-container' ||
-      inputs.job == 'report'
     runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      actions: write
     steps:
       - uses: actions/checkout@v7
-      - name: Install, audit, and check the version
-        run: make setup
+      - name: Free artifact storage
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: make cleanup-actions-artifacts
+      - run: make setup
       - uses: actions/upload-artifact@v7
         with:
-          name: node_modules
-          path: ci-artifacts/node_modules.tar
+          name: deps
+          path: build/deps/node_modules.tar
           if-no-files-found: error
           retention-days: 1
       - uses: actions/upload-artifact@v7
@@ -76,38 +64,21 @@ jobs:
 
   build:
     needs: setup
-    if: >-
-      always() &&
-      (
-        (github.event_name != 'workflow_dispatch' && needs.setup.result == 'success') ||
-        (github.event_name == 'workflow_dispatch' && inputs.job == 'build') ||
-        (
-          github.event_name == 'workflow_dispatch' &&
-          (inputs.job == 'publish-container' || inputs.job == 'report') &&
-          needs.setup.result == 'success'
-        )
-      )
+    if: success() && (github.event_name == 'push' || contains(fromJSON('["build","publish-container","report"]'), inputs.job))
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
-        continue-on-error: true
         with:
-          name: node_modules
-          path: ci-artifacts
-      - name: Build the Linux binary and the container image
-        run: make build
+          name: deps
+          path: build/deps
+      - run: make build
       - uses: actions/upload-artifact@v7
         with:
-          name: dist
-          path: dist
+          name: image
+          path: build/image
           if-no-files-found: error
-          retention-days: 1
-      - uses: actions/upload-artifact@v7
-        with:
-          name: container-image
-          path: ${{ github.event.repository.name }}-image.tar
-          if-no-files-found: error
+          compression-level: 0
           retention-days: 1
       - uses: actions/upload-artifact@v7
         if: always()
@@ -121,27 +92,15 @@ jobs:
 
   test:
     needs: setup
-    if: >-
-      always() &&
-      (
-        (github.event_name != 'workflow_dispatch' && needs.setup.result == 'success') ||
-        (github.event_name == 'workflow_dispatch' && inputs.job == 'test') ||
-        (
-          github.event_name == 'workflow_dispatch' &&
-          (inputs.job == 'publish-container' || inputs.job == 'report') &&
-          needs.setup.result == 'success'
-        )
-      )
+    if: success() && (github.event_name == 'push' || contains(fromJSON('["test","publish-container","report"]'), inputs.job))
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
-        continue-on-error: true
         with:
-          name: node_modules
-          path: ci-artifacts
-      - name: Test
-        run: make test
+          name: deps
+          path: build/deps
+      - run: make test
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -149,35 +108,24 @@ jobs:
           path: |
             build/logs
             build/summaries
-            build/test-results.json
+            build/test-results
             build/coverage
           if-no-files-found: ignore
           retention-days: 1
 
   docs:
     needs: setup
-    if: >-
-      always() &&
-      (
-        (github.event_name != 'workflow_dispatch' && needs.setup.result == 'success') ||
-        (github.event_name == 'workflow_dispatch' && inputs.job == 'docs') ||
-        (
-          github.event_name == 'workflow_dispatch' &&
-          inputs.job == 'report' &&
-          needs.setup.result == 'success'
-        )
-      )
+    if: success() && (github.event_name == 'push' || contains(fromJSON('["docs","report"]'), inputs.job))
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
-      - name: Render docs to HTML
-        run: make docs
+      - run: make docs
       - uses: actions/upload-artifact@v7
         with:
           name: docs
           path: build/docs
           if-no-files-found: ignore
-          retention-days: 1
+          retention-days: 14
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -191,18 +139,11 @@ jobs:
   publish-container:
     needs: [build, test]
     if: >-
-      always() &&
       needs.build.result == 'success' &&
       needs.test.result == 'success' &&
       (
-        (github.event_name == 'workflow_dispatch' && inputs.job == 'publish-container') ||
-        (
-          github.event_name == 'push' &&
-          (
-            github.ref == 'refs/heads/master' ||
-            github.ref == 'refs/heads/main'
-          )
-        )
+        (github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) ||
+        (github.event_name == 'workflow_dispatch' && inputs.job == 'publish-container')
       )
     runs-on: ubuntu-26.04
     permissions:
@@ -214,21 +155,20 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
       - uses: actions/download-artifact@v8
-        continue-on-error: true
         with:
-          name: container-image
-          path: image
+          name: image
+          path: build/image
       - name: Log in to GHCR
         env:
           REGISTRY_USER: ${{ github.actor }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: printf '%s\n' "$GHCR_TOKEN" | podman login "${IMAGE_NAME%%/*}" --username "$REGISTRY_USER" --password-stdin
-      - name: Push the image
-        run: make publish-container
-      - name: Delete older package versions
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: make login
+      - run: make publish-container
         env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: make prune-package-versions
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+      - run: make cleanup-container-versions
+        env:
+          GH_TOKEN: ${{ github.token }}
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -241,7 +181,7 @@ jobs:
 
   report:
     needs: [setup, build, test, docs, publish-container]
-    if: ${{ always() && !cancelled() }}
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
@@ -250,15 +190,14 @@ jobs:
         with:
           pattern: report-*
           path: build/inputs
-      - name: Collect the run into one report
-        run: make report
+      - run: make report
         env:
           DISPATCH_JOB: ${{ inputs.job }}
           JOB_RESULT_SETUP: ${{ needs.setup.result }}
           JOB_RESULT_BUILD: ${{ needs.build.result }}
           JOB_RESULT_TEST: ${{ needs.test.result }}
           JOB_RESULT_DOCS: ${{ needs.docs.result }}
-          JOB_RESULT_PUBLISH_IMAGE: ${{ needs.publish-container.result }}
+          JOB_RESULT_PUBLISH_CONTAINER: ${{ needs.publish-container.result }}
       - uses: actions/upload-artifact@v7
         if: always()
         with:
