@@ -3,6 +3,10 @@
 # then publish-container (needs build and test), then report.
 # publish-container runs on a push to master or main, and when
 # workflow_dispatch selects it. Any other branch skips it.
+# A successful push tags <version>-<run> and latest. <version> is the
+# nearest v* tag with the leading v removed. <run> is the GitHub run number.
+# The same job then keeps that package version and one former, and deletes
+# older package versions. A skipped or failed publish deletes nothing.
 # report is last. It still runs when publish-container is skipped or fails.
 # workflow_dispatch starts the one selected job. A manual publish-container
 # also runs setup, build, and test, and that manual publish may push.
@@ -206,6 +210,9 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
       - uses: actions/download-artifact@v8
         continue-on-error: true
         with:
@@ -218,6 +225,10 @@ jobs:
         run: printf '%s\n' "$GHCR_TOKEN" | podman login "${IMAGE_NAME%%/*}" --username "$REGISTRY_USER" --password-stdin
       - name: Push the image
         run: make publish-container
+      - name: Delete older package versions
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: make prune-package-versions
       - uses: actions/upload-artifact@v7
         if: always()
         with:

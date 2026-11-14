@@ -93,13 +93,20 @@ describe('workflow', () => {
     expect(source).not.toMatch(/\bernaehrung\b/)
   })
 
-  it('names the jobs in pipeline order and runs that make target once', () => {
+  it('names the jobs in pipeline order, calls each job target once, and prunes after publish', () => {
     expect(Object.keys(pipeline)).toEqual(jobNames)
     const options = [...source.matchAll(/^\s+- ([a-z0-9-]+)\s*$/gm)].map((match) => match[1])
     expect(options).toEqual(jobNames)
     for (const name of jobNames) {
-      expect(makeCalls(pipeline[name]), name).toEqual([name])
+      const calls = makeCalls(pipeline[name])
+      if (name === 'publish-container') {
+        expect(calls, name).toEqual(['publish-container', 'prune-package-versions'])
+      } else {
+        expect(calls, name).toEqual([name])
+      }
     }
+    expect(source.match(/run: make prune-package-versions/g)).toEqual(['run: make prune-package-versions'])
+    expect(Object.keys(pipeline)).not.toContain('prune-package-versions')
   })
 
   it('keeps the image name and the package version in one place', () => {
@@ -172,6 +179,26 @@ describe('workflow', () => {
     expect(pipeline['publish-container']).toContain('--password-stdin')
     expect(pipeline['publish-container']).toContain('${IMAGE_NAME%%/*}')
     expect(pipeline['publish-container']).not.toContain('dashboard-macos')
+    expect(pipeline['publish-container']).toContain('fetch-depth: 0')
+    expect(pipeline['publish-container']).toContain('fetch-tags: true')
+    expect(pipeline['publish-container']).not.toContain('edge')
+    expect(pipeline['publish-container']).not.toContain('sha-')
+    const publishLines = pipeline['publish-container'].split('\n')
+    const pruneLine = publishLines.findIndex((line) => line.includes('run: make prune-package-versions'))
+    const pushLine = publishLines.findIndex((line) => line.includes('run: make publish-container'))
+    expect(pushLine).toBeGreaterThan(-1)
+    expect(pruneLine).toBeGreaterThan(pushLine)
+    const pruneStep = publishLines.slice(pruneLine - 6, pruneLine + 1).join('\n')
+    expect(pruneStep).toContain('GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}')
+    expect(pruneStep).not.toMatch(/\bif:/)
+    const alwaysLines = publishLines.flatMap((line, index) => (line.includes('if: always()') ? [index] : []))
+    expect(alwaysLines.length).toBeGreaterThan(0)
+    expect(Math.min(...alwaysLines)).toBeGreaterThan(pruneLine)
+    expect(pipeline['publish-container'].match(/GHCR_TOKEN: \$\{\{ secrets\.GITHUB_TOKEN \}\}/g)).toHaveLength(2)
+    for (const name of jobNames) {
+      if (name === 'publish-container') continue
+      expect(pipeline[name], name).not.toContain('prune-package-versions')
+    }
     expect(source.match(/packages: write/g)).toHaveLength(1)
     expect(source).not.toMatch(/id-token:\s*write/)
     expect(source).not.toMatch(/contents:\s*write/)
@@ -289,6 +316,7 @@ describe('Makefile CI targets', () => {
     expect(source).toContain('tee build/logs/test.log')
     expect(source).toContain('tee build/logs/docs.log')
     expect(source).toContain('tee build/logs/publish-container.log')
+    expect(source).toContain('tee build/logs/prune-package-versions.log')
     expect(source).not.toContain('tee build/logs/publish-npm.log')
     expect(source).not.toContain('tee build/logs/npm-package.log')
     expect(targetChunk(source, 'docs')).toContain('node scripts/render-docs.mjs')
@@ -307,7 +335,14 @@ describe('Makefile CI targets', () => {
     expect(targetChunk(source, 'smoke-image')).toContain('id="root"')
     expect(targetChunk(source, 'smoke-image')).toContain('podman run')
     expect(targetChunk(source, 'smoke-image')).not.toContain('podman build')
+    expect(targetChunk(source, 'git-version')).toContain("git describe --tags --abbrev=0 --match 'v*'")
+    expect(targetChunk(source, 'git-version')).toContain('No v* tag describes HEAD. Refusing to invent a version.')
     expect(targetChunk(source, 'resolve-ghcr-tags')).toContain('node scripts/container-tags.mjs')
+    expect(targetChunk(source, 'resolve-ghcr-tags')).toContain('git-version')
+    expect(targetChunk(source, 'resolve-ghcr-tags')).toContain('GIT_TAG')
+    expect(targetChunk(source, 'resolve-ghcr-tags')).toContain('GITHUB_RUN_NUMBER')
+    expect(targetChunk(source, 'resolve-ghcr-tags')).not.toContain('sha-')
+    expect(targetChunk(source, 'resolve-ghcr-tags')).not.toContain('edge')
     expect(targetChunk(source, 'image-save')).toContain('podman save -o $(NAME)-image.tar')
     expect(targetChunk(source, 'image-load')).toContain('podman load -i')
     const push = targetChunk(source, 'image-push')
@@ -318,6 +353,17 @@ describe('Makefile CI targets', () => {
     expect(publish).toContain('resolve-ghcr-tags')
     expect(publish).toContain('image-push')
     expect(publish).not.toContain('podman build')
+    expect(publish).not.toContain('sha-')
+    expect(publish).not.toMatch(/\bedge\b/)
+    expect(publish).toContain('nearest v* tag')
+    expect(publish).toContain('GitHub run number')
+    const prune = targetChunk(source, 'prune-package-versions')
+    expect(prune).toContain('node scripts/prune-package-versions.mjs')
+    expect(prune).toContain('GHCR_TOKEN')
+    expect(prune).toContain('git-version')
+    expect(prune).toContain('build/summaries/prune-package-versions.md')
+    expect(prune).not.toContain('podman push')
+    expect(prune).not.toContain('## Match CI')
   })
 
   it('keeps release commands that can run locally, and gates publish', () => {
@@ -337,6 +383,25 @@ describe('Makefile CI targets', () => {
     expect(container).toContain('build/summaries/publish-container.md')
     expect(container).toContain('Status:')
     expect(container).not.toContain('gh release')
+    expect(container).not.toContain('sha-')
+    expect(container).not.toMatch(/\bedge\b/)
+  })
+})
+
+describe('pipeline docs', () => {
+  const rules = readFileSync(new URL('../docs/pipeline-rules.md', import.meta.url), 'utf8')
+  const agents = readFileSync(new URL('../AGENTS.md', import.meta.url), 'utf8')
+
+  it('records the version tag and that cleanup keeps the current version and one former', () => {
+    for (const text of [rules, agents]) {
+      expect(text).toContain('prune-package-versions')
+      expect(text).toContain('exactly one former')
+      expect(text).toContain('GitHub run number')
+      expect(text).toContain('nearest v* tag')
+      expect(text).toContain('does not invent a version')
+      expect(text).toContain('A skipped or failed publish deletes nothing.')
+      expect(text).toContain('latest')
+    }
   })
 })
 

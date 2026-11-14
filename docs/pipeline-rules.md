@@ -15,7 +15,7 @@ In file order:
 
 `build`, `test`, and `docs` each need `setup`, so those three run together. `docs` needs only `setup`. It renders `docs/` to HTML. That HTML stays out of the image. The render skips when `docs/` has no pages.
 
-`publish-container` needs `build` and `test`. It runs only after both succeed. It pushes the image `build` saved. It runs on a push to `master` or `main`, and when `workflow_dispatch` selects it. Any other branch skips it.
+`publish-container` needs `build` and `test`. It runs only after both succeed. It pushes the image `build` saved. It runs on a push to `master` or `main`, and when `workflow_dispatch` selects it. Any other branch skips it. The same job then runs `prune-package-versions`. That keeps the current published version and exactly one former, and deletes every older package version of `ghcr.io/rbe/dashboard`. If only one version exists, it deletes nothing. `latest` is a tag on the newest version, not another package version. The cleanup uses the GitHub token already used to log in. A skipped or failed publish deletes nothing.
 
 Delivery is the container image. This repository does not publish a GitHub release.
 
@@ -41,4 +41,4 @@ There is no `pull_request` trigger, so a same-repo branch is not run twice.
 
 `IMAGE_NAME` is `ghcr.io/rbe/dashboard`. `VERSION` is the `package.json` version. Both are workflow-level variables. The workflow and the image use Node 24. `npm audit` is a warning, not a failure.
 
-`publish-container` on `master` or `main` pushes `edge` and `sha-<commit>`. A manual run on any other branch pushes `sha-<commit>`. A manual run on a `vX.Y.Z` tag pushes `X.Y.Z`, `X.Y`, `X`, and `latest`. A tag push does not run the job.
+`publish-container` pushes `<version>-<run>` and `latest`. `<version>` is the nearest v* tag on the commit, with the leading `v` removed (`v1.0.0` becomes `1.0.0`). `<run>` is the GitHub run number. The job does not push `edge` or a bare `sha-<commit>` tag. If no `vMAJOR.MINOR.PATCH` tag describes the commit, the publish fails and does not invent a version. A tag push does not run the job. The publish job checks out the full history and tags so that nearest tag is available.
