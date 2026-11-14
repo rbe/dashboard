@@ -1,44 +1,43 @@
 # Pipeline rules
 
-The app pipeline is `.github/workflows/ci.yml`. A job calls the Makefile target with the same name. The client package is published by `.github/workflows/publish-client.yml`. That workflow does not call the Makefile and does not build the container image.
+The shared part is the same in every repository. Change it everywhere or nowhere. This repository's facts go under "This repository" and "Divergences".
 
-## Jobs
+## Shared rules
 
-In file order:
+The Makefile is the interface. A laptop and CI run the same targets, and a target does the same thing in both places. The workflow calls `make` and moves artifacts. It holds no other logic. Podman is the only container engine. The toolchain runs in a pinned image, so the host needs make, Podman, git, and gh.
 
-- `setup`
-- `build`
-- `test`
-- `docs`
-- `publish-container`
-- `report`
+`sdlc.mk` at the repository root is the shared makefile. It is byte-identical to the canonical copy. The project Makefile sets `IMAGE`, `PACKAGE`, and `KEEP_VERSIONS`, includes `sdlc.mk`, and defines the project targets.
 
-`build`, `test`, and `docs` each need `setup`, so those three run together. `docs` needs only `setup`. It renders `docs/` to HTML. That HTML stays out of the image. The render skips when `docs/` has no pages.
+There is one workflow, `.github/workflows/ci.yml`. Jobs, in order: `setup`, then `build`, `test`, and `docs` beside each other, then `publish-container` (needs `build` and `test`), then `report`. A repository that ships a release asset adds `publish-github`, which also needs `build` and `test`. Each job runs the make target with its name.
 
-`publish-container` needs `build` and `test`. It runs only after both succeed. It pushes the image `build` saved. It runs on a push to `master` or `main`, and when `workflow_dispatch` selects it. Any other branch skips it. The same job then runs `prune-package-versions`. That keeps the current published version and exactly one former, and deletes every older package version of `ghcr.io/rbe/dashboard`. If only one version exists, it deletes nothing. `latest` is a tag on the newest version, not another package version. The cleanup uses the GitHub token already used to log in. A skipped or failed publish deletes nothing.
+`publish-*` runs on a push to the default branch and when `workflow_dispatch` selects it. A tag push does not start a run. Any other branch runs through `report` and does not publish. A manual publish runs `build` and `test` first. In-progress runs are cancelled only off the default branch.
 
-Delivery of the app is the container image. The app pipeline does not publish a GitHub release. `publish-client.yml` packs `@rbe/dashboard-client`, creates a GitHub Release, and publishes that package to GitHub Packages. It runs on `workflow_dispatch` and on tags `client-v*`. The tag must match `client/package.json`. If it does not, the workflow fails and does not invent a version.
+The published version is the nearest `vMAJOR.MINOR.PATCH` tag, without the `v`, plus `-` and the GitHub run number. The image also gets `latest`. There is no `edge`, `sha-*`, or bare version tag. No such tag, or a nearer pre-release tag, fails the publish. After a successful publish the same job keeps that version and one former. A skipped or failed publish deletes nothing.
 
-`report` is the last job. It needs `setup`, `build`, `test`, `docs`, and `publish-container`. It still runs when `publish-container` succeeds, fails, or is skipped. The report artifact holds make output, script output, test results, coverage, and publish results: image tags, what was pushed or skipped, and why. Open `index.md` in that artifact.
+Every upload sets `retention-days`: 1 for intermediates, 14 for `report` and rendered docs. `setup` starts with `cleanup-actions-artifacts`, which deletes this repository's other artifacts once they are an hour old. The current run's artifacts stay, and so do `report` and `docs`.
 
-A manual `publish-container` also runs `setup`, `build`, and `test`, and that run publishes the image. A manual `report` runs `setup`, `build`, `test`, and `docs`, and does not publish. `report` runs after the selected job.
+`report` is last. It still runs when an earlier job fails or is skipped. It writes `build/report/index.md`.
 
-## Artifacts
+Packages and images contain the tested build only. `.containerignore` keeps out `.claude/`, `.cursor/`, `AGENTS.md`, `CLAUDE.md`, and `docs/`.
 
-Pass artifacts between jobs. A later job downloads what an earlier job uploaded.
+## This repository
 
-`setup` uploads `node_modules`. `build` uploads `dist` and the image tar. `test` uploads coverage and test output. `docs` uploads the HTML when the render wrote files. Each of those jobs also uploads its log and summary for `report`. `publish-container` downloads the image tar. `report` uploads one `report` artifact. The image tar stays a job artifact. It is not a release asset.
+| | |
+| --- | --- |
+| Image | `ghcr.io/rbe/dashboard` |
+| Default branch | `master` |
+| Toolchain | Node 24 in the image |
 
-`.npmignore` and `.containerignore` keep `.claude/`, `AGENTS.md`, `docs/`, and other instruction or private files out of the package and the image.
+Registry login is `make login`. It reads `REGISTRY_USER` and `REGISTRY_TOKEN` and runs `podman login ghcr.io`. The workflow calls that target. It does not log in itself.
 
-## Runs
+`publish-container` pushes `<version>-<run>` and `latest`. `<version>` is the nearest v* tag on the commit, with the leading `v` removed. `<run>` is the GitHub run number. If that tag is missing, the publish fails and does not invent a version. After a successful push, `cleanup-container-versions` keeps the current published version and exactly one former. One published version means it deletes nothing. `latest` is a tag on the newest version, not another package version. A skipped or failed publish deletes nothing.
 
-A push to `master` or `main` runs `publish-container` after `build` and `test`. Any other branch skips `publish-container` and still runs `report`. `docs` runs on every push, beside `build` and `test`. A `v*.*.*` tag push runs through `report` and does not publish. `workflow_dispatch` starts the one selected job. Choosing `publish-container` publishes. `report` still runs after that job, including when publish is skipped or fails.
+The app pipeline does not publish a GitHub release. `.github/workflows/publish-client.yml` packs `@rbe/dashboard-client`, creates a GitHub Release, and publishes that package to GitHub Packages on `workflow_dispatch` and tags `client-v*`. The tag must match `client/package.json`. If it does not, the workflow fails and does not invent a version. `build` also builds and smokes the Linux binary. That binary is not uploaded and is not a release asset.
 
-There is no `pull_request` trigger, so a same-repo branch is not run twice.
+## Divergences
 
-## Names
+Each entry names the shared rule, what differs, and why.
 
-`IMAGE_NAME` is `ghcr.io/rbe/dashboard`. `VERSION` is the `package.json` version. Both are workflow-level variables. The workflow and the image use Node 24. `npm audit` is a warning, not a failure.
-
-`publish-container` pushes `<version>-<run>` and `latest`. `<version>` is the nearest v* tag on the commit, with the leading `v` removed (`v1.0.0` becomes `1.0.0`). `<run>` is the GitHub run number. The job does not push `edge` or a bare `sha-<commit>` tag. If no `vMAJOR.MINOR.PATCH` tag describes the commit, the publish fails and does not invent a version. A tag push does not run the job. The publish job checks out the full history and tags so that nearest tag is available.
+- Rule: `build` saves the image tar and smokes the image. Here: `build` also builds and smokes the Linux binary, and the image smoke checks `/api/dashboard` for `not for git` and the page for `#root`. Why: a laptop and CI both prove the board server and the binary before the image tar is saved. The binary is not a published artifact.
+- Rule: `.containerignore` lists `data/`. Here: the image copies `data/dashboard.example.md`, so the ignore lists `data/dashboard.md` and `data/tls` instead of all of `data/`. Why: the example board is part of the image, and the private board is not.
+- Rule: there is one workflow, `.github/workflows/ci.yml`. Here: `.github/workflows/publish-client.yml` packs `@rbe/dashboard-client`, creates a GitHub Release, and publishes it to GitHub Packages. It runs on `workflow_dispatch` and tags `client-v*`. It does not call `make` and does not build the container image. Why: a depending app installs the typed client from GitHub Packages, separate from the image pipeline.

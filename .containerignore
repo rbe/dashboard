@@ -17,3 +17,4 @@ release
 data/dashboard.md
 data/*.tmp
 data/tls
+*.tar

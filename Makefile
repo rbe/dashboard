@@ -1,81 +1,114 @@
-# Build and run the app with Podman.
+# Node app delivered as a container image.
+# Set the product values, then include sdlc.mk before any target.
+# sdlc.mk is the shared makefile. Copy it unchanged.
 #
 # image, run, and stop need Podman and make only.
 # They do not install Node or TypeScript on the host.
-#
 # Targets whose descriptions start with "Match CI" are the jobs the
-# GitHub workflow runs. Each job calls the target with the same name.
-# The publish-container job also calls prune-package-versions after the push.
+# GitHub workflow runs. publish-container writes build/publish-version.txt.
+# The workflow then runs cleanup-container-versions, which reads that file.
 # Podman is the only container engine.
-#
-# setup, build, and test run through Podman, so macOS and Linux run the
-# same Linux steps. Node 24 stays in the image.
 
-SHELL := /bin/bash
-
-# Product. These values are the only intended difference between the
-# dashboard and ernaehrung Makefiles. NAME is the package name and the
-# GitHub repository name.
 NAME ?= dashboard
+OWNER ?= rbe
 PORT ?= 4173
 DEV_PORT ?= 5173
 DATA_FILE ?= data/dashboard.md
 DATA_ENV ?= DASHBOARD_FILE
 API_PATH ?= /api/dashboard
 SMOKE_NEEDLE ?= not for git
+SMOKE_PORT ?= 18080
 
-IMAGE ?= localhost/$(NAME):latest
-CI_IMAGE ?= localhost/$(NAME):ci
+IMAGE_NAME ?= ghcr.io/$(OWNER)/$(NAME)
+IMAGE ?= $(IMAGE_NAME)
+PACKAGE ?= $(OWNER)/$(NAME)
+KEEP_VERSIONS ?= 2
 NODE_VERSION ?= 24
 NODE_IMAGE ?= node:$(NODE_VERSION)-bookworm-slim
-IMAGE_NAME ?= ghcr.io/rbe/$(NAME)
-VERSION ?= $(shell sed -n 's/^  "version": "\([^"]*\)".*/\1/p' package.json)
-SMOKE_NAME ?= $(NAME)-ci
-SMOKE_PORT ?= $(PORT)
-IMAGE_TAR ?= image/$(NAME)-image.tar
-SETUP_TAR ?= ci-artifacts/node_modules.tar
+CI_IMAGE ?= localhost/$(NAME):ci
 
-IMAGE_SOURCE ?= $(if $(GITHUB_SERVER_URL),$(GITHUB_SERVER_URL)/$(GITHUB_REPOSITORY),https://github.com/rbe/$(NAME))
-IMAGE_REVISION ?= $(or $(GITHUB_SHA),local)
-IMAGE_VERSION ?= $(VERSION)
+HELP_LEAD ?= Podman is the only container engine, on a laptop and in CI. Node $(NODE_VERSION) stays in the image. npm start is the Vite dev server on http://127.0.0.1:$(DEV_PORT). The data file is ./$(DATA_FILE).
 
-# Single line so the expanded command stays in one shell invocation.
-NODE_RUN_OPTS = --rm -e HOME=/tmp -e npm_config_cache=/tmp/npm-cache -e npm_config_update_notifier=false -e NODE_VERSION="$(NODE_VERSION)" -e IMAGE_NAME="$(IMAGE_NAME)" -e GITHUB_REF -e GITHUB_REF_NAME -e GITHUB_SHA -e GITHUB_REPOSITORY -e GITHUB_SERVER_URL -e GITHUB_OUTPUT -e GITHUB_EVENT_NAME -e DISPATCH_JOB -e JOB_RESULT_SETUP -e JOB_RESULT_BUILD -e JOB_RESULT_TEST -e JOB_RESULT_DOCS -e JOB_RESULT_PUBLISH_IMAGE -e CI -v "$(CURDIR)":/work:Z -w /work
-NODE_RUN = podman run $(NODE_RUN_OPTS) $(NODE_IMAGE)
+include sdlc.mk
 
-.DEFAULT_GOAL := help
-.PHONY: help image run stop ci host-checks setup deps check-tag npm-ci audit build test linux-binary smoke-linux-binary report docs git-version resolve-ghcr-tags ci-image smoke-image image-save image-load image-push publish-container prune-package-versions
+NODE_RUN = podman run --rm -e HOME=/tmp -e CI -e npm_config_cache=/tmp/npm-cache \
+	-e npm_config_update_notifier=false -v "$(CURDIR)":/work:Z -w /work $(NODE_IMAGE)
 
-help: ## Show this help
-	@echo "Host requirements for image, run, and stop: Podman and make."
-	@echo "Node.js and TypeScript are not installed on the host. Node $(NODE_VERSION) stays in the image."
-	@echo "npm start is the Vite dev server on http://127.0.0.1:$(DEV_PORT)."
-	@echo
-	@echo "Targets:"
-	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-24s %s\n", $$1, $$2}'
-	@echo
-	@echo "Descriptions that start with \"Match CI\" are the jobs the GitHub workflow runs."
-	@echo "After a successful publish-container push, prune-package-versions keeps that package version and one former."
-	@echo "Podman is the only container engine, on a laptop and in CI."
-	@echo "make ci runs setup, build, test, docs, and report. It does not publish."
-	@echo "make run builds the image if needed and listens on https://127.0.0.1:$(PORT)."
-	@echo "The data file is ./$(DATA_FILE) (mounted into the container)."
-	@echo "The self-signed certificate is ./data/tls/cert.pem."
-	@echo "Override the port with: make run PORT=9000"
+.PHONY: deps npm-ci audit linux-binary smoke-linux-binary smoke-image login \
+	_setup _build _test _docs _publish-container
+
+setup: ## Match CI: npm ci, npm audit (a warning), pack node_modules
+	@$(call SDLC_LOG,setup,_setup)
+
+build: ## Match CI: Linux binary, one image, smoke, save the image tar
+	@$(call SDLC_LOG,build,_build)
+
+test: ## Match CI: tests, with results and coverage under build/
+	@$(call SDLC_LOG,test,_test)
+
+docs: ## Match CI: render docs/ to HTML under build/docs
+	@$(call SDLC_LOG,docs,_docs)
+
+login: ## Match CI: log in to ghcr.io with REGISTRY_USER and REGISTRY_TOKEN
+	@set -eu; \
+	test -n "$${REGISTRY_USER:-}" || { echo "login needs REGISTRY_USER" >&2; exit 1; }; \
+	test -n "$${REGISTRY_TOKEN:-}" || { echo "login needs REGISTRY_TOKEN" >&2; exit 1; }; \
+	printf '%s\n' "$$REGISTRY_TOKEN" | podman login ghcr.io --username "$$REGISTRY_USER" --password-stdin
+
+publish-container: ## Match CI: push MAJOR.MINOR.PATCH-run and latest
+	@$(call SDLC_LOG,publish-container,_publish-container)
+
+npm-ci: ## npm ci inside the Node image
+	$(NODE_RUN) npm ci
+
+audit: ## npm audit (a warning, not a failure)
+	$(NODE_RUN) sh -c 'npm audit --audit-level=high || echo "npm audit reported advisories; continuing"'
+
+deps:
+	@set -eu; \
+	if [ -d node_modules ]; then \
+	  echo "Using existing node_modules"; \
+	elif [ -f build/deps/node_modules.tar ]; then \
+	  tar -xf build/deps/node_modules.tar; \
+	else \
+	  $(THIS_MAKE) --no-print-directory npm-ci; \
+	fi
+
+linux-binary: deps ## Build the Linux binary
+	$(NODE_RUN) npm run package:binary
+
+smoke-linux-binary: linux-binary ## Smoke the Linux binary
+	$(NODE_RUN) node scripts/smoke-binary.mjs build/$(NAME)
 
 image: ## Build the container image
-	podman build \
-		-f Containerfile \
+	podman build -f Containerfile \
 		--build-arg NODE_VERSION=$(NODE_VERSION) \
-		--label org.opencontainers.image.source="$(IMAGE_SOURCE)" \
-		--label org.opencontainers.image.revision="$(IMAGE_REVISION)" \
-		--label org.opencontainers.image.version="$(IMAGE_VERSION)" \
-		--label org.opencontainers.image.title=$(NAME) \
-		-t "$(IMAGE)" \
-		-t "$(CI_IMAGE)" \
-		.
+		--label org.opencontainers.image.source="https://github.com/$(PACKAGE)" \
+		--label org.opencontainers.image.revision="$(or $(GITHUB_SHA),local)" \
+		--label org.opencontainers.image.version="$(or $(GITHUB_RUN_NUMBER),local)" \
+		--label org.opencontainers.image.title="$(NAME)" \
+		-t "$(IMAGE)" -t "$(CI_IMAGE)" .
 
-run: image ## Run the app detached (stop it with make stop)
+smoke-image: image ## Smoke the image on the API and the page root
+	@set -eu; \
+	command -v curl >/dev/null || { echo "smoke-image needs curl"; exit 1; }; \
+	name='$(NAME)-smoke'; \
+	podman rm -f "$$name" >/dev/null 2>&1 || true; \
+	podman run -d --name "$$name" -p 127.0.0.1:$(SMOKE_PORT):$(PORT) -e PORT=$(PORT) "$(CI_IMAGE)" >/dev/null; \
+	cleanup() { podman rm -f "$$name" >/dev/null 2>&1 || true; }; \
+	trap cleanup EXIT; \
+	ok=0; \
+	i=0; \
+	while [ "$$i" -lt 30 ]; do \
+	  if curl -fsSk "https://127.0.0.1:$(SMOKE_PORT)$(API_PATH)" 2>/dev/null | grep -qF '$(SMOKE_NEEDLE)'; then ok=1; break; fi; \
+	  i=$$((i + 1)); sleep 1; \
+	done; \
+	page=$$(curl -fsSk "https://127.0.0.1:$(SMOKE_PORT)/" || true); \
+	test "$$ok" = 1; \
+	printf '%s\n' "$$page" | grep -q 'id="root"'
+
+run: image ## Run detached on https://127.0.0.1:PORT
+	@mkdir -p data
 	@podman rm -f $(NAME) >/dev/null 2>&1 || true
 	podman run -d --name $(NAME) \
 		-p 127.0.0.1:$(PORT):$(PORT) \
@@ -85,312 +118,52 @@ run: image ## Run the app detached (stop it with make stop)
 		"$(IMAGE)"
 	@echo "$(NAME) at https://127.0.0.1:$(PORT)"
 
-stop: ## Stop and remove the detached container
+stop: ## Stop the detached container
 	@podman rm -f $(NAME) >/dev/null 2>&1 || true
-	@echo "Stopped $(NAME)"
 
-ci: setup build test docs report ## Laptop run through docs and report; this target does not publish
-	@echo "Branch pipeline finished. Nothing was published."
+clean: ## Remove build/, dist/, and node_modules/
+	rm -rf build dist node_modules
 
-# Local Linux checks. The workflow does not call this target.
-host-checks: setup test linux-binary smoke-linux-binary
+_setup:
+	@set -eu; \
+	if [ ! -d node_modules ]; then $(THIS_MAKE) --no-print-directory npm-ci; fi; \
+	$(THIS_MAKE) --no-print-directory audit; \
+	mkdir -p build/deps; \
+	tar -cf build/deps/node_modules.tar node_modules; \
+	printf '# setup\n\nNode %s. Dependencies packed.\n' "$(NODE_VERSION)" > build/summaries/setup.md
 
-# CI entry targets log their make output. CI_LOG_INNER=1 is the real recipe.
-# The workflow runs `make <job>` and uploads build/logs for the report.
-ifneq ($(CI_LOG_INNER),)
-setup: check-tag npm-ci audit
-	@mkdir -p ci-artifacts build/summaries
-	tar -cf $(SETUP_TAR) node_modules
-	@{ \
-	  echo "# setup"; \
-	  echo; \
-	  echo "node_modules archive: $(SETUP_TAR)"; \
-	  echo "npm audit is a warning, not a failure. The log has the audit output."; \
-	} > build/summaries/setup.md
-else
-setup: ## Match CI: install, version check, and npm audit
-	@mkdir -p build/logs
-	@set -o pipefail; $(MAKE) --no-print-directory CI_LOG_INNER=1 setup 2>&1 | tee build/logs/setup.log
-endif
+_build:
+	@set -eu; \
+	$(THIS_MAKE) --no-print-directory linux-binary smoke-linux-binary smoke-image; \
+	mkdir -p build/image; \
+	podman save -o build/image/$(NAME)-image.tar "$(CI_IMAGE)"; \
+	bytes=$$(wc -c < build/image/$(NAME)-image.tar | tr -d ' '); \
+	printf '# build\n\nLinux binary: build/%s\nContainer image: %s\nImage archive: build/image/%s-image.tar (%s bytes)\n' \
+	  "$(NAME)" "$(CI_IMAGE)" "$(NAME)" "$$bytes" > build/summaries/build.md
 
-# Phony on purpose: the recipe reuses node_modules or the setup archive.
-deps:
-	@set -euo pipefail; \
-	if [ -d node_modules ]; then \
-	  echo "Using existing node_modules"; \
-	else \
-	  tarfile=""; \
-	  for candidate in $(SETUP_TAR) ci-artifacts/ci-artifacts/node_modules.tar; do \
-	    if [ -f "$$candidate" ]; then tarfile="$$candidate"; break; fi; \
-	  done; \
-	  if [ -n "$$tarfile" ]; then \
-	    tar -xf "$$tarfile"; \
-	  elif [ -d ci-artifacts ] && [ -n "$$(ls -A ci-artifacts 2>/dev/null || true)" ]; then \
-	    echo "The setup archive is present but node_modules.tar was not found."; \
-	    exit 1; \
-	  else \
-	    $(MAKE) npm-ci; \
-	  fi; \
-	fi
+_test:
+	@set -eu; \
+	$(THIS_MAKE) --no-print-directory deps; \
+	mkdir -p build/test-results build/coverage; \
+	$(NODE_RUN) npm test -- --coverage --reporter=default --reporter=json --outputFile.json=build/test-results/results.json; \
+	printf '# test\n\nnpm test with coverage.\n' > build/summaries/test.md
 
-check-tag: ## A v* tag matches package.json
-	@set -euo pipefail; \
-	pkg=$$(sed -n 's/^  "version": "\([^"]*\)".*/\1/p' package.json); \
-	if [ "$(VERSION)" != "$$pkg" ]; then \
-	  echo "VERSION $(VERSION) does not match package.json $$pkg"; \
-	  exit 1; \
+_docs:
+	@set -eu; \
+	mkdir -p build/docs build/summaries; \
+	$(NODE_RUN) node scripts/render-docs.mjs --source docs --out build/docs
+
+_publish-container:
+	@set -eu; \
+	if ! podman image inspect "$(CI_IMAGE)" >/dev/null 2>&1; then \
+	  test -f build/image/$(NAME)-image.tar; \
+	  podman load -i build/image/$(NAME)-image.tar; \
 	fi; \
-	ref="$${GITHUB_REF:-}"; \
-	case "$$ref" in \
-	  refs/tags/v*) ;; \
-	  *) echo "Not a v* tag; package version check skipped"; exit 0 ;; \
-	esac; \
-	$(NODE_RUN) node -e 'const tag=String(process.env.GITHUB_REF_NAME||"").replace(/^v/,""); const pkg=require("./package.json").version; if(tag!==pkg){console.error("Tag v"+tag+" does not match package.json version "+pkg); process.exit(1)} console.log("Tag v"+tag+" matches package.json")'
-
-npm-ci: ## npm ci inside the Node image
-	$(NODE_RUN) npm ci
-
-audit: ## npm audit (a warning, not a failure)
-	@if [ ! -d node_modules ]; then $(MAKE) npm-ci; fi
-	$(NODE_RUN) sh -c 'npm audit --audit-level=high || echo "npm audit reported advisories; continuing"'
-
-ifneq ($(CI_LOG_INNER),)
-build: deps linux-binary smoke-linux-binary smoke-image image-save
-	@mkdir -p build/summaries
-	@bytes=$$(wc -c < $(NAME)-image.tar | tr -d ' '); \
-	{ \
-	  echo "# build"; \
-	  echo; \
-	  echo "Linux binary: build/$(NAME)"; \
-	  echo "Container image: $(CI_IMAGE)"; \
-	  echo "Node image: $(NODE_IMAGE)"; \
-	  echo "Image archive: $(NAME)-image.tar ($$bytes bytes)"; \
-	  echo "The archive is a job artifact for publish-container. It is not a GitHub release asset."; \
-	} > build/summaries/build.md
-	@echo "Built the Linux binary and $(CI_IMAGE)"
-else
-build: ## Match CI: Linux binary and one container image
-	@mkdir -p build/logs
-	@set -o pipefail; $(MAKE) --no-print-directory CI_LOG_INNER=1 build 2>&1 | tee build/logs/build.log
-endif
-
-ifneq ($(CI_LOG_INNER),)
-test: deps
-	$(NODE_RUN) sh -eu -c 'mkdir -p build && npm test -- --coverage --reporter=default --reporter=json --outputFile.json=build/test-results.json'
-else
-test: ## Match CI: coverage report and test output
-	@mkdir -p build/logs
-	@set -o pipefail; $(MAKE) --no-print-directory CI_LOG_INNER=1 test 2>&1 | tee build/logs/test.log
-endif
-
-linux-binary: deps ## Build the Linux binary
-	$(NODE_RUN) npm run package:binary
-
-smoke-linux-binary: linux-binary ## Smoke the Linux binary
-	$(NODE_RUN) node scripts/smoke-binary.mjs build/$(NAME)
-
-ifneq ($(CI_LOG_INNER),)
-docs:
-	$(NODE_RUN) node scripts/render-docs.mjs
-else
-docs: ## Match CI: render docs/ to HTML; skip when none exist
-	@mkdir -p build/logs
-	@set -o pipefail; $(MAKE) --no-print-directory CI_LOG_INNER=1 docs 2>&1 | tee build/logs/docs.log
-endif
-
-git-version: ## Print the nearest v* tag on HEAD, or fail if none
-	@set -euo pipefail; \
-	tag=""; \
-	if ! tag=$$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null); then \
-	  echo "No v* tag describes HEAD. Refusing to invent a version." >&2; \
-	  exit 1; \
-	fi; \
-	printf '%s\n' "$$tag"
-
-resolve-ghcr-tags: ## Resolve GHCR tags from the nearest v* tag and the GitHub run number
-	@set -euo pipefail; \
-	tag=$$($(MAKE) -s --no-print-directory git-version); \
-	if [ -z "$${GITHUB_RUN_NUMBER:-}" ]; then \
-	  echo "GITHUB_RUN_NUMBER is required and must be a positive integer. Refusing to invent a build number." >&2; \
-	  exit 1; \
-	fi; \
-	extra=""; \
-	if [ -n "$${GITHUB_OUTPUT:-}" ]; then \
-	  extra="-v $${GITHUB_OUTPUT}:$${GITHUB_OUTPUT}"; \
-	fi; \
-	podman run $(NODE_RUN_OPTS) -e GIT_TAG="$$tag" -e GITHUB_RUN_NUMBER $$extra $(NODE_IMAGE) node scripts/container-tags.mjs
-
-ci-image: smoke-image ## Build the image once, then smoke it
-
-smoke-image: image ## Smoke the image from that build (needs curl)
-	@set -euo pipefail; \
-	command -v curl >/dev/null || { echo "smoke-image needs curl"; exit 1; }; \
-	name='$(SMOKE_NAME)'; \
-	port='$(SMOKE_PORT)'; \
-	image='$(CI_IMAGE)'; \
-	podman rm -f "$$name" >/dev/null 2>&1 || true; \
-	podman run -d --name "$$name" -p "127.0.0.1:$$port:$(PORT)" -e PORT=$(PORT) "$$image"; \
-	cleanup() { \
-	  status=$$?; \
-	  if [ "$$status" -ne 0 ]; then podman logs "$$name" || true; fi; \
-	  podman rm -f "$$name" >/dev/null 2>&1 || true; \
-	  exit "$$status"; \
-	}; \
-	trap cleanup EXIT; \
-	ok=0; \
-	for _ in $$(seq 1 30); do \
-	  body=$$(curl -fsS -k "https://127.0.0.1:$$port$(API_PATH)" || true); \
-	  case "$$body" in \
-	    *'$(SMOKE_NEEDLE)'*) ok=1; break ;; \
-	  esac; \
-	  sleep 1; \
+	version=$$($(THIS_MAKE) -s --no-print-directory version); \
+	mkdir -p build; \
+	printf '%s\n' "$$version" > build/publish-version.txt; \
+	for tag in "$$version" latest; do \
+	  podman tag "$(CI_IMAGE)" "$(IMAGE):$$tag"; \
+	  podman push "$(IMAGE):$$tag"; \
 	done; \
-	test "$$ok" = 1; \
-	page=$$(curl -fsS -k "https://127.0.0.1:$$port/"); \
-	case "$$page" in \
-	  *'id="root"'*) ;; \
-	  *) echo "index missing #root"; exit 1 ;; \
-	esac; \
-	echo "Image smoke passed for $$image"
-
-image-save: ## Save the CI image tar
-	podman save -o $(NAME)-image.tar "$(CI_IMAGE)"
-
-image-load: ## Load the saved image tar
-	podman load -i "$(IMAGE_TAR)"
-
-image-push: ## Push the resolved GHCR tags (refuses when TAGS is empty)
-	@set -euo pipefail; \
-	tags="$(TAGS)"; \
-	if [ -z "$$tags" ]; then \
-	  echo "image-push publishes $(CI_IMAGE). CI sets TAGS. Refusing to push."; \
-	  exit 1; \
-	fi; \
-	podman image inspect "$(CI_IMAGE)" >/dev/null; \
-	set -f; \
-	IFS=','; \
-	set -- $$tags; \
-	set +f; \
-	count=0; \
-	for tag in "$$@"; do \
-	  [ -n "$$tag" ] || continue; \
-	  podman tag "$(CI_IMAGE)" "$$tag"; \
-	  podman push "$$tag"; \
-	  count=$$((count + 1)); \
-	done; \
-	test "$$count" -gt 0
-
-ifneq ($(CI_LOG_INNER),)
-publish-container:
-	@mkdir -p build/summaries
-	@set -euo pipefail; \
-	summary=build/summaries/publish-container.md; \
-	image_name="$(IMAGE_NAME)"; \
-	tags=""; \
-	resolver=""; \
-	status="failed"; \
-	reason="publish-container did not finish."; \
-	finish() { \
-	  { \
-	    echo "# publish-container"; \
-	    echo; \
-	    echo "Status: $$status"; \
-	    echo "Image: $$image_name"; \
-	    echo "Tags:"; \
-	    if [ -n "$$tags" ]; then printf '%s\n' "$$tags" | tr ',' '\n' | sed 's/^/- /'; else echo "- none"; fi; \
-	    echo "Reason: $$reason"; \
-	    if [ -n "$$resolver" ]; then echo; echo "Resolver:"; printf '%s\n' "$$resolver"; fi; \
-	  } > "$$summary"; \
-	}; \
-	trap finish EXIT; \
-	if podman image inspect "$(CI_IMAGE)" >/dev/null 2>&1; then \
-	  echo "Using image $(CI_IMAGE)"; \
-	elif [ -f "$(IMAGE_TAR)" ]; then \
-	  $(MAKE) image-load; \
-	elif [ -f "image/image/$(NAME)-image.tar" ]; then \
-	  mv "image/image/$(NAME)-image.tar" "$(IMAGE_TAR)"; \
-	  $(MAKE) image-load; \
-	elif [ "$${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ]; then \
-	  $(MAKE) image; \
-	else \
-	  reason="Missing $(IMAGE_TAR). The build job produces it."; \
-	  echo "$$reason"; \
-	  exit 1; \
-	fi; \
-	resolver=$$($(MAKE) -s --no-print-directory resolve-ghcr-tags); \
-	publish=$$(printf '%s\n' "$$resolver" | sed -n 's/^publish=//p'); \
-	tags=$$(printf '%s\n' "$$resolver" | sed -n 's/^tags=//p'); \
-	version=$$(printf '%s\n' "$$resolver" | sed -n 's/^version=//p'); \
-	build=$$(printf '%s\n' "$$resolver" | sed -n 's/^build=//p'); \
-	ref="$${GITHUB_REF:-}"; \
-	reason="Tags are $${version}-$${build} and latest from $${ref:-unknown}. The version is the nearest v* tag with the leading v removed. The build is the GitHub run number. latest is that same image, not another package version."; \
-	if [ "$$publish" != "true" ]; then \
-	  status="refused"; \
-	  reason="Refusing to push. Resolved publish=$$publish. $$reason"; \
-	  echo "$$reason"; \
-	  exit 1; \
-	fi; \
-	TAGS="$$tags" $(MAKE) image-push; \
-	status="pushed"
-else
-publish-container: ## Match CI: push the version-run tag and latest
-	@mkdir -p build/logs
-	@set -o pipefail; $(MAKE) --no-print-directory CI_LOG_INNER=1 publish-container 2>&1 | tee build/logs/publish-container.log
-endif
-
-ifneq ($(CI_LOG_INNER),)
-prune-package-versions:
-	@mkdir -p build/summaries
-	@set -euo pipefail; \
-	summary=build/summaries/prune-package-versions.md; \
-	status="failed"; \
-	kept="0"; \
-	deleted="0"; \
-	reason="prune-package-versions did not finish."; \
-	finish() { \
-	  { \
-	    echo "# prune-package-versions"; \
-	    echo; \
-	    echo "Status: $$status"; \
-	    echo "Kept: $$kept"; \
-	    echo "Deleted: $$deleted"; \
-	    echo "Reason: $$reason"; \
-	  } > "$$summary"; \
-	}; \
-	trap finish EXIT; \
-	tag=$$($(MAKE) -s --no-print-directory git-version); \
-	output=""; \
-	if ! output=$$(podman run $(NODE_RUN_OPTS) -e GHCR_TOKEN -e GITHUB_TOKEN -e GIT_TAG="$$tag" -e GITHUB_RUN_NUMBER $(NODE_IMAGE) node scripts/prune-package-versions.mjs); then \
-	  printf '%s\n' "$$output"; \
-	  parsed=$$(printf '%s\n' "$$output" | sed -n 's/^reason=//p'); \
-	  if [ -n "$$parsed" ]; then reason="$$parsed"; fi; \
-	  exit 1; \
-	fi; \
-	printf '%s\n' "$$output"; \
-	status=$$(printf '%s\n' "$$output" | sed -n 's/^status=//p'); \
-	kept=$$(printf '%s\n' "$$output" | sed -n 's/^kept=//p'); \
-	deleted=$$(printf '%s\n' "$$output" | sed -n 's/^deleted=//p'); \
-	parsed=$$(printf '%s\n' "$$output" | sed -n 's/^reason=//p'); \
-	if [ -n "$$parsed" ]; then reason="$$parsed"; fi; \
-	case "$$status" in \
-	  kept|deleted) ;; \
-	  *) status="failed"; reason="Unexpected prune status."; exit 1 ;; \
-	esac
-else
-prune-package-versions: ## Delete older GHCR package versions; keep the current version and one former
-	@mkdir -p build/logs
-	@set -o pipefail; $(MAKE) --no-print-directory CI_LOG_INNER=1 prune-package-versions 2>&1 | tee build/logs/prune-package-versions.log
-endif
-
-ifneq ($(CI_LOG_INNER),)
-report:
-	$(NODE_RUN) node scripts/assemble-report.mjs
-	@if [ -n "$${GITHUB_STEP_SUMMARY:-}" ] && [ -f build/report/index.md ]; then cat build/report/index.md >> "$$GITHUB_STEP_SUMMARY"; fi
-	@test -s build/report/index.md
-	@echo "Wrote build/report/index.md"
-else
-report: ## Match CI: collect quality and process into one report
-	@mkdir -p build/logs build/report/logs
-	@set -o pipefail; $(MAKE) --no-print-directory CI_LOG_INNER=1 report 2>&1 | tee build/logs/report.log
-	@cp build/logs/report.log build/report/logs/report.log
-endif
+	printf '# publish-container\n\nStatus: pushed\nImage: %s\nTags:\n- %s\n- latest\n' "$(IMAGE)" "$$version" > build/summaries/publish-container.md
