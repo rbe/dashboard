@@ -57,7 +57,7 @@ describe('dashboard cli', () => {
   })
 
   it('prints help without a production build', () => {
-    const result = spawnSync(process.execPath, ['bin/dashboard.mjs', '--help'], { encoding: 'utf8' })
+    const result = spawnSync(process.execPath, ['server/bin/dashboard.mjs', '--help'], { encoding: 'utf8' })
     expect(result.status).toBe(0)
     expect(result.stdout).toContain('--file')
   })

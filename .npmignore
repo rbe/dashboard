@@ -27,6 +27,10 @@ scripts/build-binary.mjs
 scripts/container-tags.mjs
 scripts/assemble-report.mjs
 scripts/render-docs.mjs
-scripts/sea-main.mjs
-scripts/serve.mjs
+server/sea-main.mjs
+server/serve.mjs
+client/
+shared/schema.ts
+shared/validate.d.mts
+shared/*.test.ts
 scripts/smoke-binary.mjs

@@ -93,8 +93,8 @@ describe('workflow', () => {
   const pipeline = jobs(source)
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
 
-  it('is the only workflow and does not call another workflow', () => {
-    expect(files()).toEqual(['ci.yml'])
+  it('keeps app CI in ci.yml and does not call another workflow', () => {
+    expect(files()).toEqual(['ci.yml', 'publish-client.yml'])
     const on = triggers(source)
     expect(on.workflow_call).toBe(false)
     expect(on.workflow_dispatch).toBe(true)
@@ -112,6 +112,9 @@ describe('workflow', () => {
     expect(source).not.toContain('macos-latest')
     expect(source).not.toContain('dashboard-macos')
     expect(source).not.toMatch(/\bgh release\b|action-gh-release|upload-release-asset|softprops/)
+    expect(source).not.toContain('publish-client')
+    expect(source).not.toContain('client-v')
+    expect(source).not.toContain('@rbe/dashboard-client')
     expect(source).not.toContain('SHA256SUMS')
     expect(source).not.toMatch(/contents:\s*write/)
     expect(source).not.toMatch(/docker/i)
@@ -312,6 +315,46 @@ describe('workflow', () => {
   })
 })
 
+describe('client publish workflow', () => {
+  const source = read('publish-client.yml')
+    const client = JSON.parse(readFileSync(new URL('../client/package.json', import.meta.url), 'utf8'))
+
+  it('packs the client, cuts a release, and publishes to GitHub Packages', () => {
+    expect(client.name).toBe('@rbe/dashboard-client')
+    const on = triggers(source)
+    expect(on.workflow_dispatch).toBe(true)
+    expect(on.pull_request).toBe(false)
+    expect(on.workflow_call).toBe(false)
+    expect(on.everyBranch).toBe(false)
+    expect(on.tags).toBe(false)
+    expect(source).toContain("tags:")
+    expect(source).toContain("'client-v*'")
+    expect(source).toContain('runs-on: ubuntu-26.04')
+    expect(source).toContain('actions/checkout@v7')
+    expect(source).toContain('actions/setup-node@v7')
+    expect(source).toContain('node-version: "24"')
+    expect(source).toContain('https://npm.pkg.github.com')
+    expect(source).toContain('scope: "@rbe"')
+    expect(source).toContain('working-directory: client')
+    expect(source).toContain('npm ci')
+    expect(source).toContain('npm test')
+    expect(source).toContain('npm pack')
+    expect(source).toContain('npm publish')
+    expect(source).toContain('gh release create')
+    expect(source).toContain('@rbe/dashboard-client')
+    expect(source).toContain('contents: write')
+    expect(source).toContain('packages: write')
+    expect(source).toContain('NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}')
+    expect(source).toContain('GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}')
+    expect(source).toContain('Refusing to invent a version.')
+    expect(source).toContain('client-v${version}')
+    expect(source).not.toMatch(/\bmake\b/)
+    expect(source).not.toMatch(/docker|podman|ghcr\.io/i)
+    expect(source).not.toContain('publish-container')
+    expect(source).not.toContain('workflow_call')
+  })
+})
+
 function makefile() {
   return readFileSync(new URL('../Makefile', import.meta.url), 'utf8')
 }
@@ -508,11 +551,13 @@ describe('package and image contents', () => {
       expect(containerignore, entry).toContain(entry.replace(/\/$/, ''))
     }
     expect(pkg.files).toEqual([
-      'bin/dashboard.mjs',
-      'scripts/cli.mjs',
-      'scripts/server.mjs',
-      'scripts/dashboard-api.mjs',
-      'scripts/tls-cert.mjs',
+      'server/bin/dashboard.mjs',
+      'server/cli.mjs',
+      'server/server.mjs',
+      'server/dashboard-api.mjs',
+      'server/tls-cert.mjs',
+      'shared/openapi.json',
+      'shared/validate.mjs',
       'dist',
       'data/dashboard.example.md',
     ])
@@ -542,6 +587,6 @@ describe('package and image contents', () => {
       expect(file.startsWith('src/'), file).toBe(false)
       expect(file.endsWith('.test.mjs'), file).toBe(false)
     }
-    expect(paths).toContain('bin/dashboard.mjs')
+    expect(paths).toContain('server/bin/dashboard.mjs')
   })
 })

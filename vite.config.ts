@@ -1,6 +1,6 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
-import { handleDashboardApi } from './scripts/dashboard-api.mjs'
+import { handleDashboardApi } from './server/dashboard-api.mjs'
 
 export default defineConfig({
   plugins: [
@@ -29,12 +29,18 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts', 'scripts/**/*.test.mjs'],
+    include: [
+      'src/**/*.test.ts',
+      'scripts/**/*.test.mjs',
+      'server/**/*.test.mjs',
+      'shared/**/*.test.ts',
+      'client/src/**/*.test.ts',
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'json-summary', 'lcov'],
       reportsDirectory: 'build/coverage',
-      include: ['src/**', 'scripts/**'],
+      include: ['src/**', 'scripts/**', 'server/**', 'shared/validate.mjs', 'client/src/**'],
       exclude: ['**/*.test.*'],
     },
   },

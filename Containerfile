@@ -14,7 +14,8 @@ RUN npm ci
 
 COPY index.html tsconfig.json vite.config.ts ./
 COPY src ./src
-COPY scripts ./scripts
+COPY server ./server
+COPY shared ./shared
 COPY data/dashboard.example.md ./data/dashboard.example.md
 
 RUN npm run build
@@ -24,8 +25,9 @@ FROM node:${NODE_VERSION}-bookworm-slim AS runtime
 WORKDIR /app
 
 COPY --from=build /src/dist ./dist
-COPY bin/dashboard.mjs ./bin/dashboard.mjs
-COPY scripts/cli.mjs scripts/server.mjs scripts/dashboard-api.mjs scripts/tls-cert.mjs ./scripts/
+COPY server/bin/dashboard.mjs ./server/bin/dashboard.mjs
+COPY server/cli.mjs server/server.mjs server/dashboard-api.mjs server/tls-cert.mjs ./server/
+COPY shared/openapi.json shared/validate.mjs ./shared/
 COPY data/dashboard.example.md ./data/dashboard.example.md
 
 # Root inside the container is the invoking user under rootless Podman,
@@ -36,5 +38,5 @@ ENV PORT=4173
 EXPOSE 4173
 
 # The server defaults to 127.0.0.1, which published ports cannot reach.
-ENTRYPOINT ["node", "bin/dashboard.mjs"]
+ENTRYPOINT ["node", "server/bin/dashboard.mjs"]
 CMD ["--host", "0.0.0.0"]
