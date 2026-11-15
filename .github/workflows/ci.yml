@@ -4,8 +4,12 @@
 # publish-container runs on a push to the default branch (master) and when
 # workflow_dispatch selects it. A tag push does not start a run; after
 # tagging vX.Y.Z, dispatch publish-container. Any other branch skips it.
-# The push tags <X.Y.Z>-<run> and latest, then keeps that package version
-# and exactly one former. A skipped or failed publish deletes nothing.
+# A default-branch publish tags <X.Y.Z>-<run> and latest, then keeps that
+# run and the next-lower run on the same line. A manual publish from any
+# other ref tags the version only: it does not move latest and cleanup
+# deletes nothing. A missing GHCR package is an empty list. Cleanup leaves
+# a version that still has latest or any tag other than X.Y.Z-<run>.
+# A skipped or failed publish deletes nothing.
 # report is last and still runs when an earlier job fails or is skipped.
 # Every step is checkout, artifact transfer, or make. Registry login is make login.
 
@@ -32,6 +36,7 @@ permissions:
 env:
   IMAGE_NAME: ghcr.io/rbe/dashboard
   NODE_VERSION: "24"
+  SDLC_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
 
 jobs:
   setup:

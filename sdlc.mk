@@ -13,6 +13,12 @@
 # version: $(shell git describe), then a strict vMAJOR.MINOR.PATCH check.
 # A nearer pre-release tag (v1.2.0-rc.1) fails the publish.
 # Cleanups: gh api --jq. DRY_RUN=1 prints deletions and performs none.
+# A publish whose GITHUB_REF is not refs/heads/$SDLC_DEFAULT_BRANCH tags
+# the version only: publish-tags omits latest, and both cleanups exit
+# without deleting. A missing GHCR package (HTTP 404) deletes nothing.
+# The former kept is the next-lower run on that MAJOR.MINOR.PATCH line.
+# A version that still wears latest, or any tag that is not
+# MAJOR.MINOR.PATCH-<run>, is not deleted.
 #
 # Set before the include:
 #   IMAGE            ghcr.io/owner/name, no tag
@@ -50,7 +56,7 @@ THIS_MAKE := $(MAKE)
 
 # setup, build, test, and the publish targets are phony here so a build/
 # directory cannot satisfy the build target.
-.PHONY: help version ci report setup build test docs \
+.PHONY: help version ci report setup build test docs publish-tags \
 	publish-container publish-github image run stop clean \
 	cleanup-container-versions cleanup-github-releases cleanup-actions-artifacts
 
@@ -77,6 +83,24 @@ if [ -z "$$tag" ]; then tag=$$($(THIS_MAKE) -s --no-print-directory version); fi
 printf '%s\n' "$$tag" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-[1-9][0-9]*$$' \
   || { echo "Publish tag '$$tag' is not MAJOR.MINOR.PATCH-run. Refusing to delete." >&2; exit 1; }
 endef
+
+# Sets on_default=1 when this publish moves latest and may delete old versions.
+# No GITHUB_REF (a laptop) does. CI does only when GITHUB_REF is
+# refs/heads/$SDLC_DEFAULT_BRANCH. The workflow sets that from
+# github.event.repository.default_branch. Any other ref tags the version
+# only: no latest, and cleanup exits without deleting.
+define SDLC_ON_DEFAULT
+ref="$${GITHUB_REF:-}"; def="$${SDLC_DEFAULT_BRANCH:-}"; \
+if [ -z "$$ref" ]; then on_default=1; \
+elif [ -n "$$def" ] && [ "$$ref" = "refs/heads/$$def" ]; then on_default=1; \
+else on_default=0; fi
+endef
+
+publish-tags: ## Print tags to push. latest only on the default branch
+	@set -eu; \
+	printf '%s\n' "$$($(THIS_MAKE) -s --no-print-directory version)"; \
+	$(SDLC_ON_DEFAULT); \
+	if [ "$$on_default" -eq 1 ]; then printf '%s\n' latest; fi
 
 help: ## Show the targets. A "Match CI" line is a target the workflow runs
 	@printf '%s\n' "$(HELP_LEAD)"
@@ -154,12 +178,14 @@ report: ## Match CI: write build/report/index.md from logs, summaries, and job r
 	echo "Wrote $$out/index.md" | tee build/logs/report.log; \
 	printf '# report\n\nWrote %s\n' "$$out/index.md" > build/summaries/report.md
 
-cleanup-container-versions: ## Match CI: keep the published image version and one former
+cleanup-container-versions: ## Match CI: on the default branch, keep this run and the next-lower run
 	@set -eu; \
 	mkdir -p build/logs build/summaries; \
 	status=failed; kept=0; deleted=0; reason="cleanup did not finish"; \
 	finish() { printf '# cleanup-container-versions\n\nStatus: %s\nKept: %s\nDeleted: %s\n\n%s\n' "$$status" "$$kept" "$$deleted" "$$reason" > build/summaries/cleanup-container-versions.md; printf 'status=%s\nkept=%s\ndeleted=%s\nreason=%s\n' "$$status" "$$kept" "$$deleted" "$$reason"; }; \
 	trap finish EXIT; \
+	$(SDLC_ON_DEFAULT); \
+	if [ "$$on_default" -eq 0 ]; then status=kept; reason="Ref is not the default branch. Tagged the version only. Nothing deleted."; exit 0; fi; \
 	$(SDLC_TAG); \
 	image="$(IMAGE)"; \
 	case "$$image" in \
@@ -176,23 +202,33 @@ cleanup-container-versions: ## Match CI: keep the published image version and on
 	  *) base="users/$$owner/packages/container/$$name" ;; \
 	esac; \
 	tab=$$(printf '\t'); \
-	versions=$$(gh api --paginate "$$base/versions?per_page=100" --jq '.[] | [(.id|tostring), .created_at, ((.metadata.container.tags // []) | join(","))] | @tsv'); \
-	if ! plan=$$(printf '%s\n' "$$versions" | awk -F "$$tab" -v tag="$$tag" -v keep="$(KEEP_VERSIONS)" ' \
+	err=build/logs/cleanup-container-versions.gh-err; code=0; \
+	versions=$$(gh api --paginate "$$base/versions?per_page=100" --jq '.[] | [(.id|tostring), .created_at, ((.metadata.container.tags // []) | join(","))] | @tsv' 2>"$$err") || code=$$?; \
+	if [ "$$code" -ne 0 ]; then \
+	  if grep -q 404 "$$err"; then versions=""; \
+	  else cat "$$err" >&2; reason="Could not list package versions."; exit 1; fi; \
+	fi; \
+	if [ -z "$$versions" ]; then status=kept; reason="No package versions. A missing GHCR package (HTTP 404) is an empty list. Nothing deleted."; exit 0; fi; \
+	line=$${tag%-*}; runn=$${tag##*-}; \
+	if ! plan=$$(printf '%s\n' "$$versions" | awk -F "$$tab" -v tag="$$tag" -v line="$$line" -v run="$$runn" -v keep="$(KEEP_VERSIONS)" ' \
+	  function rolling(t) { return t ~ /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-[1-9][0-9]*$$/ } \
 	  NF < 2 { next } \
-	  { n++; id[n] = $$1; created[n] = $$2; s = "," $$3 ","; if (index(s, "," tag ",") > 0) { hits++; cur = n } } \
+	  { n++; id[n] = $$1; protected[n] = 0; ver_run[n] = -1; nt = split($$3, parts, ","); \
+	    for (i = 1; i <= nt; i++) { p = parts[i]; if (p == "") continue; \
+	      if (!rolling(p)) protected[n] = 1; \
+	      if (p == tag) { hits++; cur = n } \
+	      if (rolling(p) && index(p, line "-") == 1) { r = p; sub(/^.*-/, "", r); r = r + 0; if (r > ver_run[n]) ver_run[n] = r } } } \
 	  END { \
 	    if (hits != 1) exit 2; \
-	    keptn = 1; print "keep", id[cur]; \
-	    while (keptn < keep + 0) { \
-	      best = 0; \
-	      for (i = 1; i <= n; i++) { \
-	        if (i == cur || seen[i]) continue; \
-	        if (best == 0 || created[i] > created[best]) best = i; \
-	      } \
-	      if (best == 0) break; \
-	      seen[best] = 1; keptn++; print "keep", id[best]; \
-	    } \
-	    for (i = 1; i <= n; i++) if (i != cur && !seen[i]) print "delete", id[i]; \
+	    print "keep", id[cur]; \
+	    extra = keep + 0 - 1; \
+	    while (extra > 0) { best = -1; \
+	      for (i = 1; i <= n; i++) { r = ver_run[i]; if (i == cur || r < 0 || r >= run + 0 || picked[r]) continue; if (best < 0 || r > best) best = r } \
+	      if (best < 0) break; picked[best] = 1; extra-- } \
+	    for (i = 1; i <= n; i++) { if (i == cur) continue; \
+	      if (ver_run[i] >= 0 && picked[ver_run[i]]) { print "keep", id[i]; continue } \
+	      if (protected[i]) continue; \
+	      print "delete", id[i] } \
 	  }'); then \
 	  reason="Tag $$tag is not exactly one package version. Refusing to delete."; \
 	  echo "$$reason" >&2; \
@@ -205,37 +241,40 @@ cleanup-container-versions: ## Match CI: keep the published image version and on
 	  if [ -n "$(DRY_RUN)" ]; then echo "would delete package version $$id"; \
 	  else gh api -X DELETE "$$base/versions/$$id" >/dev/null; echo "deleted package version $$id"; fi; \
 	done; \
-	if [ "$$deleted" -eq 0 ]; then status=kept; reason="Nothing older than the $$kept kept version(s)."; \
-	elif [ -n "$(DRY_RUN)" ]; then status=dry-run; reason="Would delete $$deleted version(s). Kept $$tag and $$((kept - 1)) former. Nothing deleted."; \
-	else status=deleted; reason="Kept $$tag and $$((kept - 1)) former."; fi
+	if [ "$$deleted" -eq 0 ]; then status=kept; reason="Kept $$tag and the next-lower run on that line. Versions that wear latest or a non-rolling tag were left in place."; \
+	elif [ -n "$(DRY_RUN)" ]; then status=dry-run; reason="Would delete $$deleted rolling version(s). Kept $$tag and the next-lower run. Nothing deleted."; \
+	else status=deleted; reason="Kept $$tag and the next-lower run on that line. Versions that wear latest or a non-rolling tag were left in place."; fi
 
-cleanup-github-releases: ## Match CI: keep the published release and one former. Never delete a v* tag
+cleanup-github-releases: ## Match CI: on the default branch, keep this release and the next-lower run
 	@set -eu; \
 	mkdir -p build/logs build/summaries; \
 	status=failed; kept=0; deleted=0; reason="cleanup did not finish"; \
 	finish() { printf '# cleanup-github-releases\n\nStatus: %s\nKept: %s\nDeleted: %s\n\n%s\n' "$$status" "$$kept" "$$deleted" "$$reason" > build/summaries/cleanup-github-releases.md; printf 'status=%s\nkept=%s\ndeleted=%s\nreason=%s\n' "$$status" "$$kept" "$$deleted" "$$reason"; }; \
 	trap finish EXIT; \
+	$(SDLC_ON_DEFAULT); \
+	if [ "$$on_default" -eq 0 ]; then status=kept; reason="Ref is not the default branch. Tagged the version only. Nothing deleted."; exit 0; fi; \
 	$(SDLC_TAG); \
 	repo="$(PACKAGE)"; \
 	if [ -z "$$repo" ]; then reason="PACKAGE is empty. Set it to owner/name."; echo "$$reason" >&2; exit 1; fi; \
 	tab=$$(printf '\t'); \
 	releases=$$(gh api --paginate "repos/$$repo/releases?per_page=100" --jq '.[] | [(.id|tostring), .tag_name, .created_at] | @tsv'); \
-	if ! plan=$$(printf '%s\n' "$$releases" | awk -F "$$tab" -v tag="$$tag" -v keep="$(KEEP_VERSIONS)" ' \
+	line=$${tag%-*}; runn=$${tag##*-}; \
+	if ! plan=$$(printf '%s\n' "$$releases" | awk -F "$$tab" -v tag="$$tag" -v line="$$line" -v run="$$runn" -v keep="$(KEEP_VERSIONS)" ' \
+	  function rolling(t) { return t ~ /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-[1-9][0-9]*$$/ } \
 	  NF < 3 { next } \
-	  { n++; id[n] = $$1; name[n] = $$2; created[n] = $$3; if ($$2 == tag) { hits++; cur = n } } \
+	  { n++; id[n] = $$1; name[n] = $$2; ver_run[n] = -1; if ($$2 == tag) { hits++; cur = n } \
+	    if (rolling($$2) && index($$2, line "-") == 1) { r = $$2; sub(/^.*-/, "", r); ver_run[n] = r + 0 } } \
 	  END { \
 	    if (hits != 1) exit 2; \
-	    keptn = 1; print "keep", id[cur], name[cur]; \
-	    while (keptn < keep + 0) { \
-	      best = 0; \
-	      for (i = 1; i <= n; i++) { \
-	        if (i == cur || seen[i] || name[i] ~ /^v/) continue; \
-	        if (best == 0 || created[i] > created[best]) best = i; \
-	      } \
-	      if (best == 0) break; \
-	      seen[best] = 1; keptn++; print "keep", id[best], name[best]; \
-	    } \
-	    for (i = 1; i <= n; i++) if (i != cur && !seen[i] && name[i] !~ /^v/) print "delete", id[i], name[i]; \
+	    print "keep", id[cur], name[cur]; \
+	    extra = keep + 0 - 1; \
+	    while (extra > 0) { best = -1; \
+	      for (i = 1; i <= n; i++) { r = ver_run[i]; if (i == cur || r < 0 || r >= run + 0 || picked[r]) continue; if (best < 0 || r > best) best = r } \
+	      if (best < 0) break; picked[best] = 1; extra-- } \
+	    for (i = 1; i <= n; i++) { if (i == cur) continue; \
+	      if (ver_run[i] >= 0 && picked[ver_run[i]]) { print "keep", id[i], name[i]; continue } \
+	      if (!rolling(name[i])) continue; \
+	      print "delete", id[i], name[i] } \
 	  }'); then \
 	  reason="Release $$tag does not exist. Refusing to delete."; \
 	  echo "$$reason" >&2; \
