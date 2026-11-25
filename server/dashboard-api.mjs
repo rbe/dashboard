@@ -31,9 +31,7 @@ export function createStore(file) {
 }
 
 export const store = createStore(
-  process.env.DASHBOARD_FILE
-    ? path.resolve(process.env.DASHBOARD_FILE)
-    : path.resolve('data/dashboard.md'),
+  process.env.DASHBOARD_FILE ? path.resolve(process.env.DASHBOARD_FILE) : path.resolve('data/dashboard.md'),
 )
 
 function send(res, method, code, body) {

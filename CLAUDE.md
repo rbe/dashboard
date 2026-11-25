@@ -10,17 +10,17 @@ This project ships as a container image, with the merge into the default branch.
 
 ## Product
 
-| | |
-| --- | --- |
-| Name | dashboard |
-| Vite dev server | http://127.0.0.1:5173 (`npm start`) |
-| Podman HTTPS server | https://127.0.0.1:4173 (`make run`) |
-| Data file | `data/dashboard.md` |
-| Data env | `DASHBOARD_FILE` |
-| API | `/api/dashboard`, contract `shared/openapi.json` |
-| Smoke needle | `not for git` |
-| Image | `ghcr.io/rbe/dashboard` |
-| Default branch | `master` |
+|                     |                                                  |
+| ------------------- | ------------------------------------------------ |
+| Name                | dashboard                                        |
+| Vite dev server     | http://127.0.0.1:5173 (`npm start`)              |
+| Podman HTTPS server | https://127.0.0.1:4173 (`make run`)              |
+| Data file           | `data/dashboard.md`                              |
+| Data env            | `DASHBOARD_FILE`                                 |
+| API                 | `/api/dashboard`, contract `shared/openapi.json` |
+| Smoke needle        | `not for git`                                    |
+| Image               | `ghcr.io/rbe/dashboard`                          |
+| Default branch      | `master`                                         |
 
 `NAME` in the Makefile is the npm package name and the GitHub repository name. Do not commit `data/`.
 

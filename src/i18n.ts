@@ -41,8 +41,7 @@ export const messages = {
   emptyBody:
     'Add a system, import a bookmarks.html export, or load the sample. Links live in a local Markdown file and are not committed to git.',
   noMatches: 'Nothing matches this search.',
-  imported: (added: number, skipped: number) =>
-    `Imported ${added}. Skipped ${skipped} already on the board.`,
+  imported: (added: number, skipped: number) => `Imported ${added}. Skipped ${skipped} already on the board.`,
   nothingImported: 'No http(s) bookmarks found in that file.',
   replaceSample: 'Replace the local board with the sample?',
   file: 'Local file',

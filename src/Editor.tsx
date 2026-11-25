@@ -93,7 +93,11 @@ export function Editor({
       const value = field.value.trim()
       if (!key && !value) continue
       if (!isFieldKey(key)) {
-        setError(key && ['id', 'summary', 'note', 'task', 'tags', 'pinned', 'subject', 'name'].includes(key) ? t.reservedField : t.badField)
+        setError(
+          key && ['id', 'summary', 'note', 'task', 'tags', 'pinned', 'subject', 'name'].includes(key)
+            ? t.reservedField
+            : t.badField,
+        )
         return
       }
       if (seen.has(key)) {
@@ -147,7 +151,11 @@ export function Editor({
         <div className="dialog-body">
           <label className="field">
             {t.name}
-            <input value={form.name} autoComplete="off" onChange={(event) => setForm({ ...form, name: event.target.value })} />
+            <input
+              value={form.name}
+              autoComplete="off"
+              onChange={(event) => setForm({ ...form, name: event.target.value })}
+            />
           </label>
           <div className="split">
             <label className="field">
@@ -181,11 +189,19 @@ export function Editor({
           </div>
           <label className="field">
             {t.summary}
-            <input value={form.summary} autoComplete="off" onChange={(event) => setForm({ ...form, summary: event.target.value })} />
+            <input
+              value={form.summary}
+              autoComplete="off"
+              onChange={(event) => setForm({ ...form, summary: event.target.value })}
+            />
           </label>
           <label className="field">
             {t.note}
-            <input value={form.note} autoComplete="off" onChange={(event) => setForm({ ...form, note: event.target.value })} />
+            <input
+              value={form.note}
+              autoComplete="off"
+              onChange={(event) => setForm({ ...form, note: event.target.value })}
+            />
           </label>
           <label className="field">
             {t.tags}

@@ -49,10 +49,7 @@ export function groupSystems(systems: System[], groupBy: string): Group[] {
       order.push(key)
     }
   }
-  const keys =
-    groupBy === 'subject'
-      ? order
-      : [...order.filter(Boolean).sort(byAlpha), ...order.filter((key) => !key)]
+  const keys = groupBy === 'subject' ? order : [...order.filter(Boolean).sort(byAlpha), ...order.filter((key) => !key)]
   return keys.map((key) => ({ key, systems: buckets.get(key) ?? [] }))
 }
 

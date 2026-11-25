@@ -18,7 +18,12 @@ function packageBin(name, binName = name) {
 
 execFileSync(
   process.execPath,
-  [packageBin('openapi-typescript'), path.join(repo, 'shared', 'openapi.json'), '-o', path.join(repo, 'shared', 'schema.ts')],
+  [
+    packageBin('openapi-typescript'),
+    path.join(repo, 'shared', 'openapi.json'),
+    '-o',
+    path.join(repo, 'shared', 'schema.ts'),
+  ],
   { stdio: 'inherit' },
 )
 

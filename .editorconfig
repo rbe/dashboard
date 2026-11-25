@@ -1,0 +1,25 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.py]
+indent_size = 4
+
+[{Makefile,Makefile.*,*.mk}]
+indent_style = unset
+indent_size = unset
+
+[*.md]
+indent_style = unset
+indent_size = unset
+
+# gofmt owns the layout of a Go file.
+[{*.go,go.mod,go.sum}]
+indent_style = unset
+indent_size = unset

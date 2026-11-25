@@ -68,7 +68,8 @@ const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPat
 if (isMain) {
   try {
     assertNodeVersion(process.env.NODE_VERSION)
-    const imageName = process.env.IMAGE_NAME || (process.env.GITHUB_REPOSITORY ? `ghcr.io/${process.env.GITHUB_REPOSITORY}` : '')
+    const imageName =
+      process.env.IMAGE_NAME || (process.env.GITHUB_REPOSITORY ? `ghcr.io/${process.env.GITHUB_REPOSITORY}` : '')
     const version = versionFromGitTag(process.env.GIT_TAG || '')
     const build = requireBuild(process.env.GITHUB_RUN_NUMBER || '')
     const result = resolveImageTags({ imageName, version, build })
