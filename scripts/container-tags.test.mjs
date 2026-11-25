@@ -1,6 +1,13 @@
+// id: ADR-0004
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { containerfileNodeVersion, formatGithubOutput, requireBuild, resolveImageTags, versionFromGitTag } from './container-tags.mjs'
+import {
+  containerfileNodeVersion,
+  formatGithubOutput,
+  requireBuild,
+  resolveImageTags,
+  versionFromGitTag,
+} from './container-tags.mjs'
 
 describe('container image tags', () => {
   it('publishes the nearest release as version-run and latest', () => {
@@ -13,10 +20,7 @@ describe('container image tags', () => {
     expect(result.version).toBe('1.2.3')
     expect(result.build).toBe('42')
     expect(result.image).toBe('ghcr.io/rbe/dashboard')
-    expect(result.tags).toEqual([
-      'ghcr.io/rbe/dashboard:1.2.3-42',
-      'ghcr.io/rbe/dashboard:latest',
-    ])
+    expect(result.tags).toEqual(['ghcr.io/rbe/dashboard:1.2.3-42', 'ghcr.io/rbe/dashboard:latest'])
     expect(formatGithubOutput(result)).toContain('publish=true')
     expect(formatGithubOutput(result)).toContain('tags=ghcr.io/rbe/dashboard:1.2.3-42,ghcr.io/rbe/dashboard:latest')
     expect(result.tags.some((tag) => tag.endsWith(':edge') || tag.includes('sha-'))).toBe(false)
@@ -37,24 +41,30 @@ describe('container image tags', () => {
     expect(() => requireBuild('0')).toThrow(/Refusing to invent a build number/)
     expect(() => requireBuild('01')).toThrow(/Refusing to invent a build number/)
     expect(() => requireBuild('abc')).toThrow(/Refusing to invent a build number/)
-    expect(() => resolveImageTags({
-      imageName: 'ghcr.io/rbe/dashboard',
-      version: '1.0.0',
-      build: '',
-    })).toThrow(/Refusing to invent a build number/)
+    expect(() =>
+      resolveImageTags({
+        imageName: 'ghcr.io/rbe/dashboard',
+        version: '1.0.0',
+        build: '',
+      }),
+    ).toThrow(/Refusing to invent a build number/)
   })
 
   it('fails instead of inventing a version', () => {
-    expect(() => resolveImageTags({
-      imageName: 'ghcr.io/rbe/dashboard',
-      version: '',
-      build: '7',
-    })).toThrow(/Refusing to invent a version/)
-    expect(() => resolveImageTags({
-      imageName: 'ghcr.io/rbe/dashboard',
-      version: '1.0.0-rc.1',
-      build: '7',
-    })).toThrow(/Refusing to invent a version/)
+    expect(() =>
+      resolveImageTags({
+        imageName: 'ghcr.io/rbe/dashboard',
+        version: '',
+        build: '7',
+      }),
+    ).toThrow(/Refusing to invent a version/)
+    expect(() =>
+      resolveImageTags({
+        imageName: 'ghcr.io/rbe/dashboard',
+        version: '1.0.0-rc.1',
+        build: '7',
+      }),
+    ).toThrow(/Refusing to invent a version/)
   })
 
   it('does not publish an edge tag or a sha tag', () => {

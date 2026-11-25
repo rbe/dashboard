@@ -1,6 +1,9 @@
 # Node app delivered as a container image.
-# Set the product values, then include sdlc.mk before any target.
-# sdlc.mk is the shared makefile. Copy it unchanged.
+# Make contract: project-setup. help is the default goal. This makefile
+# sets the command variables of the contract and defines none of the
+# contract targets again. The GitHub makefile is the installed sdlc.mk of
+# github-pipeline. It is included before any target and adds the contract
+# targets, the image targets, version, publish tags, cleanup, and report.
 #
 # image, run, and stop need Podman and make only.
 # They do not install Node or TypeScript on the host.
@@ -17,95 +20,97 @@ DATA_FILE ?= data/dashboard.md
 DATA_ENV ?= DASHBOARD_FILE
 API_PATH ?= /api/dashboard
 SMOKE_NEEDLE ?= not for git
-SMOKE_PORT ?= 18080
 
 IMAGE_NAME ?= ghcr.io/$(OWNER)/$(NAME)
 IMAGE ?= $(IMAGE_NAME)
 PACKAGE ?= $(OWNER)/$(NAME)
 KEEP_VERSIONS ?= 2
 NODE_VERSION ?= 24
-NODE_IMAGE ?= node:$(NODE_VERSION)-bookworm-slim
+NODE_IMAGE ?= docker.io/library/node:$(NODE_VERSION)-bookworm-slim
 CI_IMAGE ?= localhost/$(NAME):ci
+# curl runs in this image for the smoke check of make build. It joins
+# the network of the smoke container, so no port of the host is used.
+CURL_IMAGE ?= docker.io/curlimages/curl:8.17.0
 
 HELP_LEAD ?= Podman is the only container engine, on a laptop and in CI. Node $(NODE_VERSION) stays in the image. npm start is the Vite dev server on http://127.0.0.1:$(DEV_PORT). The data file is ./$(DATA_FILE).
 
-include sdlc.mk
-
 NODE_RUN = podman run --rm -e HOME=/tmp -e CI -e npm_config_cache=/tmp/npm-cache \
 	-e npm_config_update_notifier=false -v "$(CURDIR)":/work:Z -w /work $(NODE_IMAGE)
-
-.PHONY: deps npm-ci audit linux-binary smoke-linux-binary smoke-image login \
-	_setup _build _test _docs _publish-container
-
-setup: ## Match CI: npm ci, npm audit (a warning), pack node_modules
-	@$(call SDLC_LOG,setup,_setup)
-
-build: ## Match CI: Linux binary, one image, smoke, save the image tar
-	@$(call SDLC_LOG,build,_build)
-
-test: ## Match CI: tests, with results and coverage under build/
-	@$(call SDLC_LOG,test,_test)
-
-docs: ## Match CI: render docs/ to HTML under build/docs
-	@$(call SDLC_LOG,docs,_docs)
-
-login: ## Match CI: log in to ghcr.io with REGISTRY_USER and REGISTRY_TOKEN
-	@set -eu; \
-	test -n "$${REGISTRY_USER:-}" || { echo "login needs REGISTRY_USER" >&2; exit 1; }; \
-	test -n "$${REGISTRY_TOKEN:-}" || { echo "login needs REGISTRY_TOKEN" >&2; exit 1; }; \
-	printf '%s\n' "$$REGISTRY_TOKEN" | podman login ghcr.io --username "$$REGISTRY_USER" --password-stdin
-
-publish-container: ## Match CI: push the version, and latest on the default branch
-	@$(call SDLC_LOG,publish-container,_publish-container)
-
-npm-ci: ## npm ci inside the Node image
-	$(NODE_RUN) npm ci
-
-audit: ## npm audit (a warning, not a failure)
-	$(NODE_RUN) sh -c 'npm audit --audit-level=high || echo "npm audit reported advisories; continuing"'
-
-deps:
-	@set -eu; \
-	if [ -d node_modules ]; then \
-	  echo "Using existing node_modules"; \
-	elif [ -f build/deps/node_modules.tar ]; then \
-	  tar -xf build/deps/node_modules.tar; \
-	else \
-	  $(THIS_MAKE) --no-print-directory npm-ci; \
+# The jobs after setup unpack the dependencies that setup packed.
+NODE_DEPS = if [ ! -d node_modules ]; then \
+	  if [ -f build/deps/node_modules.tar ]; then tar -xf build/deps/node_modules.tar; \
+	  else $(NODE_RUN) npm ci; fi; \
 	fi
 
-linux-binary: deps ## Build the Linux binary
-	$(NODE_RUN) npm run package:binary
+# The command variables of the contract. A # inside one is written \#.
+SETUP_CMD = set -eu; \
+	mkdir -p build/deps build/summaries; \
+	if [ ! -d node_modules ]; then $(NODE_RUN) npm ci; fi; \
+	$(NODE_RUN) sh -c 'npm audit --audit-level=high || echo "npm audit reported advisories; continuing"'; \
+	tar -cf build/deps/node_modules.tar node_modules; \
+	printf '\# setup\n\nNode %s. Dependencies packed.\n' "$(NODE_VERSION)" > build/summaries/setup.md
+# build makes and smokes the Linux binary, then image-ci of container.mk
+# builds the image, runs SMOKE_CMD, and saves the image tar.
+BUILD_CMD = set -eu; \
+	$(NODE_DEPS); \
+	$(NODE_RUN) npm run package:binary; \
+	$(NODE_RUN) node scripts/smoke-binary.mjs build/$(NAME); \
+	$(THIS_MAKE) --no-print-directory image-ci
+TEST_CMD = set -eu; \
+	$(NODE_DEPS); \
+	mkdir -p build/summaries build/test-results build/coverage; \
+	$(NODE_RUN) npm test -- --coverage --reporter=default --reporter=json --outputFile.json=build/test-results/results.json; \
+	printf '\# test\n\nnpm test with coverage.\n' > build/summaries/test.md
+FORMAT_CMD = $(NODE_RUN) npm exec -- prettier --check .
+FORMAT_FIX_CMD = $(NODE_RUN) npm exec -- prettier --write .
+LINT_CMD = $(NODE_RUN) npm exec -- eslint .
+# There is no integration entry. make test runs every test.
+INTEGRATION_CMD = true
+# Vitest writes lcov to build/coverage. Its workers write no V8 coverage,
+# so there is no coverage map, and test-changed asks Vitest for the tests
+# that import the changed files (ADR-0005).
+COVERAGE_CMD = set -eu; \
+	$(NODE_DEPS); \
+	$(NODE_RUN) npm test -- --coverage; \
+	base=$$(git merge-base HEAD origin/$(DEFAULT_BRANCH) 2>/dev/null || git merge-base HEAD $(DEFAULT_BRANCH) 2>/dev/null || git rev-parse -q --verify HEAD 2>/dev/null || git hash-object -t tree /dev/null); \
+	git add -N .; \
+	git diff "$$base" > build/coverage/change.diff; \
+	REPORT=build/coverage/lcov.info $(DIFF_COVER)
+TEST_CHANGED_CMD = set -eu; \
+	$(NODE_DEPS); \
+	changed=$$(grep -E '\.(ts|tsx|mjs|js)$$' build/coverage/changed.txt | while read -r f; do if [ -f "$$f" ]; then printf '%s ' "$$f"; fi; done); \
+	if [ -z "$$changed" ]; then printf '%s\n' "test-changed: no changed source file. make test runs the full suite."; \
+	else printf 'test-changed: vitest related %s\n' "$$changed"; $(NODE_RUN) npm exec -- vitest related --run $$changed; fi
 
-smoke-linux-binary: linux-binary ## Smoke the Linux binary
-	$(NODE_RUN) node scripts/smoke-binary.mjs build/$(NAME)
+RENDER_DOCS = 1
+DOCS_CMD = set -eu; \
+	mkdir -p build/docs build/summaries; \
+	$(NODE_RUN) node scripts/render-docs.mjs --source docs --out build/docs
+PUBLISH_IMAGE = 1
+SDLC_JOBS ?= setup build test docs publish-container
 
-image: ## Build the container image
-	podman build -f Containerfile \
-		--build-arg NODE_VERSION=$(NODE_VERSION) \
-		--label org.opencontainers.image.source="https://github.com/$(PACKAGE)" \
-		--label org.opencontainers.image.revision="$(or $(GITHUB_SHA),local)" \
-		--label org.opencontainers.image.version="$(or $(GITHUB_RUN_NUMBER),local)" \
-		--label org.opencontainers.image.title="$(NAME)" \
-		-t "$(IMAGE)" -t "$(CI_IMAGE)" .
-
-smoke-image: image ## Smoke the image on the API and the page root
-	@set -eu; \
-	command -v curl >/dev/null || { echo "smoke-image needs curl"; exit 1; }; \
-	name='$(NAME)-smoke'; \
+# The image targets come from container.mk. The smoke check reads the
+# API for the needle and the page for the React root.
+IMAGE_BUILD_ARGS = --build-arg NODE_VERSION=$(NODE_VERSION) --label org.opencontainers.image.title="$(NAME)"
+SMOKE_CMD = name=$(NAME)-smoke; \
 	podman rm -f "$$name" >/dev/null 2>&1 || true; \
-	podman run -d --name "$$name" -p 127.0.0.1:$(SMOKE_PORT):$(PORT) -e PORT=$(PORT) "$(CI_IMAGE)" >/dev/null; \
-	cleanup() { podman rm -f "$$name" >/dev/null 2>&1 || true; }; \
-	trap cleanup EXIT; \
+	podman run -d --name "$$name" -e PORT=$(PORT) "$(CI_IMAGE)" >/dev/null; \
 	ok=0; \
 	i=0; \
 	while [ "$$i" -lt 30 ]; do \
-	  if curl -fsSk "https://127.0.0.1:$(SMOKE_PORT)$(API_PATH)" 2>/dev/null | grep -qF '$(SMOKE_NEEDLE)'; then ok=1; break; fi; \
+	  if podman run --rm --network "container:$$name" $(CURL_IMAGE) -fsSk "https://127.0.0.1:$(PORT)$(API_PATH)" 2>/dev/null | grep -qF '$(SMOKE_NEEDLE)'; then ok=1; break; fi; \
 	  i=$$((i + 1)); sleep 1; \
 	done; \
-	page=$$(curl -fsSk "https://127.0.0.1:$(SMOKE_PORT)/" || true); \
+	page=$$(podman run --rm --network "container:$$name" $(CURL_IMAGE) -fsSk "https://127.0.0.1:$(PORT)/" 2>/dev/null || true); \
+	podman rm -f "$$name" >/dev/null 2>&1 || true; \
 	test "$$ok" = 1; \
 	printf '%s\n' "$$page" | grep -q 'id="root"'
+
+include .claude/skills/github-pipeline/sdlc.mk
+
+# Project targets.
+
+.PHONY: run stop clean
 
 run: image ## Run detached on https://127.0.0.1:PORT
 	@mkdir -p data
@@ -123,49 +128,3 @@ stop: ## Stop the detached container
 
 clean: ## Remove build/, dist/, and node_modules/
 	rm -rf build dist node_modules
-
-_setup:
-	@set -eu; \
-	if [ ! -d node_modules ]; then $(THIS_MAKE) --no-print-directory npm-ci; fi; \
-	$(THIS_MAKE) --no-print-directory audit; \
-	mkdir -p build/deps; \
-	tar -cf build/deps/node_modules.tar node_modules; \
-	printf '# setup\n\nNode %s. Dependencies packed.\n' "$(NODE_VERSION)" > build/summaries/setup.md
-
-_build:
-	@set -eu; \
-	$(THIS_MAKE) --no-print-directory linux-binary smoke-linux-binary smoke-image; \
-	mkdir -p build/image; \
-	podman save -o build/image/$(NAME)-image.tar "$(CI_IMAGE)"; \
-	bytes=$$(wc -c < build/image/$(NAME)-image.tar | tr -d ' '); \
-	printf '# build\n\nLinux binary: build/%s\nContainer image: %s\nImage archive: build/image/%s-image.tar (%s bytes)\n' \
-	  "$(NAME)" "$(CI_IMAGE)" "$(NAME)" "$$bytes" > build/summaries/build.md
-
-_test:
-	@set -eu; \
-	$(THIS_MAKE) --no-print-directory deps; \
-	mkdir -p build/test-results build/coverage; \
-	$(NODE_RUN) npm test -- --coverage --reporter=default --reporter=json --outputFile.json=build/test-results/results.json; \
-	printf '# test\n\nnpm test with coverage.\n' > build/summaries/test.md
-
-_docs:
-	@set -eu; \
-	mkdir -p build/docs build/summaries; \
-	$(NODE_RUN) node scripts/render-docs.mjs --source docs --out build/docs
-
-_publish-container:
-	@set -eu; \
-	if ! podman image inspect "$(CI_IMAGE)" >/dev/null 2>&1; then \
-	  test -f build/image/$(NAME)-image.tar; \
-	  podman load -i build/image/$(NAME)-image.tar; \
-	fi; \
-	version=$$($(THIS_MAKE) -s --no-print-directory version); \
-	mkdir -p build; \
-	printf '%s\n' "$$version" > build/publish-version.txt; \
-	tags=$$($(THIS_MAKE) -s --no-print-directory publish-tags); \
-	for tag in $$tags; do \
-	  podman tag "$(CI_IMAGE)" "$(IMAGE):$$tag"; \
-	  podman push "$(IMAGE):$$tag"; \
-	done; \
-	shown=$$(printf '%s\n' "$$tags" | sed 's/^/- /'); \
-	printf '# publish-container\n\nStatus: pushed\nImage: %s\nTags:\n%s\n' "$(IMAGE)" "$$shown" > build/summaries/publish-container.md

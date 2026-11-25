@@ -1,3 +1,4 @@
+// id: ADR-0004
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -107,7 +108,11 @@ describe('assemble report', () => {
       write(root, 'build/inputs/report-test/coverage/lcov.info', 'TN:\n')
       write(root, 'build/inputs/report-test/logs/test.log', 'npm test\nFAIL board saves\n')
       write(root, 'build/inputs/report-setup/logs/setup.log', 'npm audit reported advisories; continuing\n')
-      write(root, 'build/inputs/report-setup/summaries/setup.md', '# setup\n\nnode_modules archive: ci-artifacts/node_modules.tar\n')
+      write(
+        root,
+        'build/inputs/report-setup/summaries/setup.md',
+        '# setup\n\nnode_modules archive: ci-artifacts/node_modules.tar\n',
+      )
       write(
         root,
         'build/inputs/report-build/summaries/build.md',

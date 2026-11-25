@@ -1,3 +1,5 @@
+// id: ADR-0001
+// id: ADR-0002
 import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'

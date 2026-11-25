@@ -14,3 +14,7 @@ release
 
 # APM dependencies
 apm_modules/
+build/
+docs/adr/index.toon
+docs/skill-index.toon
+coverage/
