@@ -66,7 +66,7 @@ make run
 
 Open https://127.0.0.1:4173. `make run` builds the image, starts the container in the background, and `make stop` stops and removes it. The board file is `data/dashboard.md` in this directory, mounted into the container, and the self-signed certificate is written to `data/tls/` there. `make run PORT=9000` listens on that port.
 
-`make help` lists every target. A description that starts with "Match CI" is a job the GitHub workflow runs, so a laptop and CI share one command. Podman is the only container engine. `make ci` runs `setup`, `build`, `test`, `docs`, and `report` on a laptop. It does not publish.
+`make help` lists every target. A description that starts with "Match CI" is a job the GitHub workflow runs, so a laptop and CI share one command. Podman is the only container engine. `make ci` runs `setup`, `build`, `editorconfig`, `format`, `lint`, `test`, `integration`, `coverage`, `docs`, and `report` on a laptop. It does not publish.
 
 ## Pipeline
 

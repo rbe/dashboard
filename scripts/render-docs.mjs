@@ -32,11 +32,7 @@ function walk(dir, prefix = '') {
 }
 
 function escapeHtml(text) {
-  return text
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
+  return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
 }
 
 function inline(text) {
@@ -139,5 +135,8 @@ const links = pages.map((rel) => {
   return `<li><a href="${escapeHtml(htmlName)}">${escapeHtml(rel)}</a></li>`
 })
 writeFileSync(path.join(out, 'index.html'), page('Docs', `<h1>Docs</h1>\n<ul>\n${links.join('\n')}\n</ul>`))
-writeSummary(out, `# docs\n\nRendered ${pages.length} page${pages.length === 1 ? '' : 's'} to ${out}.\n\n${pages.map((rel) => `- ${rel}`).join('\n')}\n`)
+writeSummary(
+  out,
+  `# docs\n\nRendered ${pages.length} page${pages.length === 1 ? '' : 's'} to ${out}.\n\n${pages.map((rel) => `- ${rel}`).join('\n')}\n`,
+)
 console.log(`Rendered ${pages.length} docs to ${out}`)

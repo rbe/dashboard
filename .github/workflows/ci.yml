@@ -12,6 +12,7 @@
 # A skipped or failed publish deletes nothing.
 # report is last and still runs when an earlier job fails or is skipped.
 # Every step is checkout, artifact transfer, or make. Registry login is make login.
+# The test job runs the six gates: editorconfig, format, lint, test, integration, coverage.
 
 name: CI
 
@@ -34,7 +35,7 @@ permissions:
   contents: read
 
 env:
-  IMAGE_NAME: ghcr.io/rbe/dashboard
+  IMAGE: ghcr.io/rbe/dashboard
   NODE_VERSION: "24"
   SDLC_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
 
@@ -101,11 +102,18 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/download-artifact@v8
         with:
           name: deps
           path: build/deps
+      - run: make editorconfig
+      - run: make format
+      - run: make lint
       - run: make test
+      - run: make integration
+      - run: make coverage
       - uses: actions/upload-artifact@v7
         if: always()
         with:

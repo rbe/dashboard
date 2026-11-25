@@ -65,7 +65,6 @@ export function App() {
   useEffect(() => {
     void reload()
     // The file is only read once at startup. Reload is explicit after that.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -196,10 +195,14 @@ export function App() {
             <button type="button" disabled={!systems} onClick={() => fileRef.current?.click()}>
               {t.importBookmarks}
             </button>
-            <button type="button" disabled={!systems} onClick={() => {
-              if ((systems?.length ?? 0) > 0 && !window.confirm(t.replaceSample)) return
-              persist(parseDashboard(sampleMarkdown))
-            }}>
+            <button
+              type="button"
+              disabled={!systems}
+              onClick={() => {
+                if ((systems?.length ?? 0) > 0 && !window.confirm(t.replaceSample)) return
+                persist(parseDashboard(sampleMarkdown))
+              }}
+            >
               {t.sample}
             </button>
             <button type="button" className="primary" disabled={!systems} onClick={() => setEditor(blankSystem())}>
@@ -263,14 +266,18 @@ export function App() {
                 className="group-toggle"
                 aria-expanded={!isClosed}
                 onClick={() =>
-                  setClosed((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]))
+                  setClosed((current) =>
+                    current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+                  )
                 }
               >
                 <span className={isClosed ? 'chevron' : 'chevron open'} aria-hidden="true" />
                 <span className="group-label">{label}</span>
                 <span className="count">{group.systems.length}</span>
               </button>
-              {isClosed ? null : <div className={activeView === 'cards' ? 'cards' : 'stack'}>{group.systems.map(renderSystem)}</div>}
+              {isClosed ? null : (
+                <div className={activeView === 'cards' ? 'cards' : 'stack'}>{group.systems.map(renderSystem)}</div>
+              )}
             </section>
           )
         })}

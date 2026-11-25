@@ -1,15 +1,6 @@
 import type { Link, System } from './types'
 
-export const RESERVED_FIELDS = new Set([
-  'id',
-  'summary',
-  'note',
-  'task',
-  'tags',
-  'pinned',
-  'subject',
-  'name',
-])
+export const RESERVED_FIELDS = new Set(['id', 'summary', 'note', 'task', 'tags', 'pinned', 'subject', 'name'])
 
 const FIELD_KEY = /^[A-Za-z][A-Za-z0-9_-]*$/
 
@@ -229,12 +220,15 @@ export function serializeDashboard(systems: System[]): string {
       for (const link of links) {
         const href = sanitizeHref(link.href)
         if (!href) continue
-        const label = (link.label || href).replace(/[\[\]]/g, '').trim() || href
+        const label = (link.label || href).replace(/[[\]]/g, '').trim() || href
         const role = link.role.trim().replace(/\s+/g, '')
         lines.push(role ? `- [${label}](${href}) role=${role}` : `- [${label}](${href})`)
       }
       lines.push('')
     }
   }
-  return `${lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`
+  return `${lines
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trimEnd()}\n`
 }

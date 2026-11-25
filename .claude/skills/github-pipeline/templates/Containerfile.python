@@ -1,0 +1,16 @@
+# Python image. The image copies named files, not the work tree.
+# Change PACKAGE to the package directory, and the start command to the
+# one this project uses. The default command imports the package, which
+# is the smoke check of make image-ci. A project with dependencies copies
+# its requirements file and installs it before the copy of the source.
+# make image passes PYTHON_IMAGE when the Makefile sets IMAGE_BUILD_ARGS.
+ARG PYTHON_IMAGE=docker.io/library/python:3.13-slim
+
+FROM ${PYTHON_IMAGE}
+WORKDIR /app
+ENV PYTHONPATH=/app PYTHONDONTWRITEBYTECODE=1
+# A flat layout copies PACKAGE/. A src/ layout copies src/PACKAGE/ to PACKAGE/:
+#   COPY src/PACKAGE/ PACKAGE/
+COPY PACKAGE/ PACKAGE/
+USER 65534:65534
+CMD ["python3", "-c", "import PACKAGE"]

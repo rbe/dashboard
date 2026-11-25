@@ -56,15 +56,13 @@ const dir = mkdtempSync(path.join(tmpdir(), 'dashboard-smoke-'))
 const file = path.join(dir, 'board.md')
 const cert = path.join(dir, 'cert.pem')
 const key = path.join(dir, 'key.pem')
-const child = spawn(path.resolve(command), [
-  '--port', String(port),
-  '--host', '127.0.0.1',
-  '--file', file,
-  '--cert', cert,
-  '--key', key,
-], {
-  stdio: ['ignore', 'pipe', 'pipe'],
-})
+const child = spawn(
+  path.resolve(command),
+  ['--port', String(port), '--host', '127.0.0.1', '--file', file, '--cert', cert, '--key', key],
+  {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  },
+)
 let logs = ''
 child.stdout.on('data', (chunk) => {
   logs += chunk

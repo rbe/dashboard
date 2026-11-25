@@ -1,3 +1,4 @@
+// id: ADR-0002
 import { describe, expect, it, vi } from 'vitest'
 import { createDashboardClient, DashboardClientError } from './index.ts'
 

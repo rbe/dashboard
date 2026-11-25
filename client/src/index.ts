@@ -7,9 +7,7 @@ export type DashboardFile = components['schemas']['DashboardFile']
 export type DashboardWrite = components['schemas']['DashboardWrite']
 export type DashboardSaved = components['schemas']['DashboardSaved']
 export type DashboardProblem =
-  | components['schemas']['ReadFailed']
-  | components['schemas']['WriteFailed']
-  | components['schemas']['MethodNotAllowed']
+  components['schemas']['ReadFailed'] | components['schemas']['WriteFailed'] | components['schemas']['MethodNotAllowed']
 
 export class DashboardClientError extends Error {
   readonly status: number
@@ -101,7 +99,11 @@ async function call(
   throw new DashboardClientError(response.status, body as DashboardProblem)
 }
 
-export function createDashboardClient(options: { baseUrl: string; fetch?: typeof fetch; ca?: string }): DashboardClient {
+export function createDashboardClient(options: {
+  baseUrl: string
+  fetch?: typeof fetch
+  ca?: string
+}): DashboardClient {
   const baseUrl = options.baseUrl.replace(/\/$/, '')
   const fetchImpl = options.fetch ?? (options.ca ? fetchWithCertificate(options.ca) : globalThis.fetch)
   return {

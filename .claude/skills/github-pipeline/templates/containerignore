@@ -1,0 +1,14 @@
+# What the image build must not see. The image copies named files,
+# not the work tree. Skills, the entry file, and development files stay out.
+.git
+.github
+.claude/
+apm_modules/
+CLAUDE.md
+docs/
+build/
+node_modules
+data/
+.env
+.env.*
+*.tar

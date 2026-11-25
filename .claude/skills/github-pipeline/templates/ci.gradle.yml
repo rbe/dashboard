@@ -1,0 +1,222 @@
+# One pipeline. Delivery is the container image and a GitHub release with
+# the JAR.
+# Jobs: setup, then build and test beside each other, then
+# publish-container and publish-github (each needs build and test), then report.
+# There is no docs job. A repository that renders docs adds the job of
+# ci.node.yml, the docs target, and its own renderer.
+# The Make contract is the project-setup skill: help is the default goal.
+# setup, build, test, and login are that skill's target names.
+# The jobs setup, build, and test use those names. login is the
+# step `make login`, not its own job. This workflow calls make; it does
+# not define the contract.
+# A developer or agent can do everything this pipeline does through Make.
+# The YAML only checks out, uploads and downloads artifacts, and calls make.
+# Registry login is `make login`. Gradle, npm, podman, python, and tar run
+# inside the matching target.
+# The Gradle case is build: the build job runs `make build`, and that target
+# runs Gradle. The job does not call ./gradlew. setup and test are
+# the same kind of target. Between jobs only the tested JAR moves. test
+# runs beside build and compiles again; it does not download build output.
+# Publishing runs on a push to the default branch and when workflow_dispatch
+# selects a publish job. A tag push does not start a run; after tagging
+# vX.Y.Z, dispatch the publish job. A default-branch publish tags
+# <X.Y.Z>-<run> and latest, then keeps that run and the next-lower run.
+# A manual publish from any other ref tags the version only.
+# report is last and still runs when an earlier job fails or is skipped.
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+    inputs:
+      job:
+        description: Job to run (with the jobs it needs, then report)
+        required: true
+        type: choice
+        options:
+          [setup, build, test, publish-container, publish-github, report]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' && github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/OWNER/NAME
+  SDLC_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+
+jobs:
+  setup:
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Free artifact storage
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: make cleanup-actions-artifacts
+      - run: make setup
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: report-setup
+          path: |
+            build/logs
+            build/summaries
+          if-no-files-found: ignore
+          retention-days: 1
+
+  build:
+    needs: setup
+    if: github.event_name == 'push' || contains(fromJSON('["build","publish-container","publish-github","report"]'), inputs.job)
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+      - run: make build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: jar
+          path: build/dist
+          if-no-files-found: error
+          retention-days: 1
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: report-build
+          path: |
+            build/logs
+            build/summaries
+          if-no-files-found: ignore
+          retention-days: 1
+
+  test:
+    needs: setup
+    if: github.event_name == 'push' || contains(fromJSON('["test","publish-container","publish-github","report"]'), inputs.job)
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - run: make editorconfig
+      - run: make format
+      - run: make lint
+      - run: make test
+      - run: make integration
+      - run: make coverage
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: report-test
+          path: |
+            build/logs
+            build/summaries
+            build/test-results
+            build/reports
+            build/coverage
+          if-no-files-found: ignore
+          retention-days: 1
+
+  publish-container:
+    needs: [build, test]
+    if: >-
+      (github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) ||
+      inputs.job == 'publish-container'
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/download-artifact@v8
+        with:
+          name: jar
+          path: build/dist
+      - run: make login
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ github.token }}
+      - run: make publish-container
+        env:
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+      - run: make cleanup-container-versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: report-publish-container
+          path: |
+            build/logs
+            build/summaries
+          if-no-files-found: ignore
+          retention-days: 1
+
+  publish-github:
+    needs: [build, test]
+    if: >-
+      (github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) ||
+      inputs.job == 'publish-github'
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/download-artifact@v8
+        with:
+          name: jar
+          path: build/dist
+      - run: make publish-github
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+      - run: make cleanup-github-releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: report-publish-github
+          path: |
+            build/logs
+            build/summaries
+          if-no-files-found: ignore
+          retention-days: 1
+
+  report:
+    needs: [setup, build, test, publish-container, publish-github]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: report-*
+          path: build/inputs
+      - run: make report
+        env:
+          DISPATCH_JOB: ${{ inputs.job }}
+          JOB_RESULT_SETUP: ${{ needs.setup.result }}
+          JOB_RESULT_BUILD: ${{ needs.build.result }}
+          JOB_RESULT_TEST: ${{ needs.test.result }}
+          JOB_RESULT_PUBLISH_CONTAINER: ${{ needs.publish-container.result }}
+          JOB_RESULT_PUBLISH_GITHUB: ${{ needs.publish-github.result }}
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: report
+          path: build/report
+          if-no-files-found: error
+          retention-days: 14

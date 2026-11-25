@@ -101,7 +101,8 @@ function pickCoverage(files) {
 }
 
 function parseTests(json) {
-  if (!json || typeof json !== 'object') return { present: false, total: 0, passed: 0, failed: 0, pending: 0, failures: [] }
+  if (!json || typeof json !== 'object')
+    return { present: false, total: 0, passed: 0, failed: 0, pending: 0, failures: [] }
   const failures = []
   for (const suite of json.testResults || []) {
     for (const test of suite.assertionResults || []) {
@@ -324,7 +325,10 @@ export function renderReport(model) {
   }
   lines.push('## Coverage', '')
   if (!model.coverage.present) {
-    lines.push('No `coverage-summary.json` was collected. Raw coverage files are copied when the test job uploaded them.', '')
+    lines.push(
+      'No `coverage-summary.json` was collected. Raw coverage files are copied when the test job uploaded them.',
+      '',
+    )
   } else {
     lines.push(
       `| | percent |`,

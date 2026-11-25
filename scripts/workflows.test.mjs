@@ -1,20 +1,11 @@
-import { createHash } from 'node:crypto'
+// id: ADR-0004
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-const SDLC_MK_SHA256 = '45c6cf23664d030c61f0fedd2d0639cd9dc2dc7bb03c14167dce61fed9d495d6'
-
 const workflowDir = new URL('../.github/workflows/', import.meta.url)
-const jobNames = [
-  'setup',
-  'build',
-  'test',
-  'docs',
-  'publish-container',
-  'report',
-]
+const jobNames = ['setup', 'build', 'test', 'docs', 'publish-container', 'report']
 
 function read(name) {
   return readFileSync(new URL(name, workflowDir), 'utf8')
@@ -106,7 +97,9 @@ describe('workflow', () => {
     expect(source).toContain("github.ref != format('refs/heads/{0}', github.event.repository.default_branch)")
     expect(source).not.toContain("github.ref_type == 'branch'")
     expect(source).not.toMatch(/uses:\s*\.\/\.github\/workflows\//)
-    expect(source).not.toMatch(/\bhost-checks\b|\bci-image\b|\bnpm-tarball\b|\bmacos-binary\b|\bmacos-package\b|\bnpm-publish\b|\bpublish-github\b|\bnpm-package\b|\bpublish-npm\b/)
+    expect(source).not.toMatch(
+      /\bhost-checks\b|\bci-image\b|\bnpm-tarball\b|\bmacos-binary\b|\bmacos-package\b|\bnpm-publish\b|\bpublish-github\b|\bnpm-package\b|\bpublish-npm\b/,
+    )
     expect(source).not.toMatch(/\bNPM_PUBLISH\b|\bNPM_TOKEN\b|\bid-token\b/)
     expect(source).not.toContain('actions/setup-node')
     expect(source).not.toContain('macos-latest')
@@ -131,6 +124,8 @@ describe('workflow', () => {
       const calls = makeCalls(pipeline[name])
       if (name === 'setup') {
         expect(calls, name).toEqual(['cleanup-actions-artifacts', 'setup'])
+      } else if (name === 'test') {
+        expect(calls, name).toEqual(['editorconfig', 'format', 'lint', 'test', 'integration', 'coverage'])
       } else if (name === 'publish-container') {
         expect(calls, name).toEqual(['login', 'publish-container', 'cleanup-container-versions'])
       } else {
@@ -155,7 +150,7 @@ describe('workflow', () => {
 
   it('keeps the image name in one place and does not invent a version', () => {
     expect(source.match(/ghcr\.io\/rbe\/dashboard/g)).toEqual(['ghcr.io/rbe/dashboard'])
-    expect(source.match(/^ {2}IMAGE_NAME:/gm)).toHaveLength(1)
+    expect(source.match(/^ {2}IMAGE:/gm)).toHaveLength(1)
     expect(source).not.toMatch(/^ {2}VERSION:/m)
     expect(source).not.toContain(pkg.version)
     expect(source).toContain('NODE_VERSION: "24"')
@@ -239,7 +234,7 @@ describe('workflow', () => {
     expect(pipeline['publish-container']).toContain("inputs.job == 'publish-container'")
     expect(pipeline['publish-container']).toContain("github.event_name == 'workflow_dispatch'")
     expect(pipeline['publish-container']).toContain("github.event_name == 'push'")
-    expect(pipeline['publish-container']).toContain("github.event.repository.default_branch")
+    expect(pipeline['publish-container']).toContain('github.event.repository.default_branch')
     expect(pipeline['publish-container']).not.toContain("github.ref == 'refs/heads/master'")
     expect(pipeline['publish-container']).not.toContain("github.ref == 'refs/heads/main'")
     expect(pipeline['publish-container']).not.toContain('refs/tags')
@@ -258,7 +253,8 @@ describe('workflow', () => {
     expect(pipeline['publish-container']).not.toContain('dashboard-macos')
     expect(pipeline['publish-container']).toContain('fetch-depth: 0')
     expect(pipeline['publish-container']).toContain('fetch-tags: true')
-    expect(source.match(/fetch-depth: 0/g)).toHaveLength(1)
+    expect(pipeline.test).toContain('fetch-depth: 0')
+    expect(source.match(/fetch-depth: 0/g)).toHaveLength(2)
     expect(source.match(/fetch-tags: true/g)).toHaveLength(1)
     expect(pipeline['publish-container']).not.toContain('edge')
     expect(pipeline['publish-container']).not.toContain('sha-')
@@ -318,7 +314,7 @@ describe('workflow', () => {
 
 describe('client publish workflow', () => {
   const source = read('publish-client.yml')
-    const client = JSON.parse(readFileSync(new URL('../client/package.json', import.meta.url), 'utf8'))
+  const client = JSON.parse(readFileSync(new URL('../client/package.json', import.meta.url), 'utf8'))
 
   it('packs the client, cuts a release, and publishes to GitHub Packages', () => {
     expect(client.name).toBe('@rbe/dashboard-client')
@@ -328,7 +324,7 @@ describe('client publish workflow', () => {
     expect(on.workflow_call).toBe(false)
     expect(on.everyBranch).toBe(false)
     expect(on.tags).toBe(false)
-    expect(source).toContain("tags:")
+    expect(source).toContain('tags:')
     expect(source).toContain("'client-v*'")
     expect(source).toContain('runs-on: ubuntu-26.04')
     expect(source).toContain('actions/checkout@v7')
@@ -360,6 +356,15 @@ function makefile() {
   return readFileSync(new URL('../Makefile', import.meta.url), 'utf8')
 }
 
+function variable(source, name) {
+  const lines = source.split('\n')
+  const start = lines.findIndex((line) => line.startsWith(`${name} = `))
+  if (start === -1) throw new Error(`missing variable ${name}`)
+  const body = [lines[start].slice(name.length + 3)]
+  for (let i = start; lines[i].endsWith('\\'); i += 1) body.push(lines[i + 1])
+  return body.join('\n').trim()
+}
+
 function targetChunk(source, name) {
   const lines = source.split('\n')
   const start = lines.findIndex((line) => line.startsWith(`${name}:`))
@@ -375,29 +380,54 @@ function targetChunk(source, name) {
 describe('Makefile CI targets', () => {
   const source = makefile()
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
-  const sdlc = readFileSync(new URL('../sdlc.mk', import.meta.url))
+  const contractTargets = [
+    'setup',
+    'build',
+    'test',
+    'editorconfig',
+    'format',
+    'format-fix',
+    'lint',
+    'integration',
+    'coverage',
+    'test-changed',
+    'docs',
+    'login',
+    'help',
+    'doctor',
+    'image',
+    'image-ci',
+    'publish-container',
+  ]
+  const sdlcTargets = [
+    'version',
+    'ci',
+    'report',
+    'publish-tags',
+    'cleanup-container-versions',
+    'cleanup-github-releases',
+    'cleanup-actions-artifacts',
+  ]
 
-  it('includes the shared makefile byte for byte', () => {
-    expect(createHash('sha256').update(sdlc).digest('hex')).toBe(SDLC_MK_SHA256)
-    const includeAt = source.indexOf('\ninclude sdlc.mk\n')
+  it('includes the installed sdlc.mk of github-pipeline before any target', () => {
+    const include = '\ninclude .claude/skills/github-pipeline/sdlc.mk\n'
+    const includeAt = source.indexOf(include)
     expect(includeAt).toBeGreaterThan(-1)
     expect(source.slice(0, includeAt)).not.toMatch(/^[a-zA-Z0-9_-]+:/m)
-    for (const name of ['help', 'version', 'ci', 'report', 'cleanup-container-versions', 'cleanup-github-releases', 'cleanup-actions-artifacts', 'host-checks', 'git-version', 'prune-package-versions']) {
+    expect(source).not.toMatch(/^-?include sdlc\.mk$/m)
+    expect(source).not.toMatch(/^-?include .*project-setup\/project\.mk$/m)
+    expect(existsSync(new URL('../sdlc.mk', import.meta.url))).toBe(false)
+    expect(existsSync(new URL('../.claude/skills/github-pipeline/sdlc.mk', import.meta.url))).toBe(true)
+    for (const name of [...contractTargets, ...sdlcTargets]) {
       expect(source, name).not.toMatch(new RegExp(`^${name}:`, 'm'))
     }
     expect(source).toContain('IMAGE ?= $(IMAGE_NAME)')
     expect(source).toContain('PACKAGE ?= $(OWNER)/$(NAME)')
     expect(source).toContain('KEEP_VERSIONS ?= 2')
-    expect(source).not.toContain('host-checks')
-    expect(source).not.toContain('prune-package-versions')
-    expect(source).not.toContain('scripts/prune-package-versions.mjs')
+    expect(source).toContain('RENDER_DOCS = 1')
+    expect(source).toContain('PUBLISH_IMAGE = 1')
     expect(source).not.toContain('scripts/assemble-report.mjs')
     expect(source).not.toContain('publish-github')
-    expect(sdlc.toString('utf8')).toContain('SDLC_CI ?= setup build test docs report')
-    expect(sdlc.toString('utf8')).toContain('Refusing to invent a version.')
-    expect(sdlc.toString('utf8')).toContain("git describe --tags --abbrev=0 --match 'v[0-9]*'")
-    expect(sdlc.toString('utf8')).toContain('GITHUB_RUN_NUMBER must be a positive integer')
-    expect(existsSync(new URL('../scripts/prune-package-versions.mjs', import.meta.url))).toBe(false)
   })
 
   it('uses Podman in CI and on a laptop', () => {
@@ -405,13 +435,11 @@ describe('Makefile CI targets', () => {
     expect(source).toContain('CI_IMAGE ?= localhost/$(NAME):ci')
     expect(source).toContain(`NAME ?= ${pkg.name}`)
     expect(source).toContain('IMAGE_NAME ?= ghcr.io/$(OWNER)/$(NAME)')
-    expect(source).not.toMatch(/docker/i)
-    expect(source).not.toContain('CONTAINER')
+    expect(source).not.toMatch(/docker\b(?!\.io)/i)
+    expect(source).not.toContain('CONTAINER_ENGINE')
     expect(source).toContain('Podman is the only container engine, on a laptop and in CI.')
     expect(source).toContain('$(DEV_PORT)')
     expect(source).toContain('$(DATA_FILE)')
-    expect(sdlc.toString('utf8')).toContain('Match CI')
-    expect(sdlc.toString('utf8')).toContain('Podman is the only container engine.')
   })
 
   it('keeps the product block and uses it', () => {
@@ -419,115 +447,51 @@ describe('Makefile CI targets', () => {
       expect(source, key).toMatch(new RegExp(`^${key} \\?= \\S`, 'm'))
     }
     expect(targetChunk(source, 'run')).toContain('$(DATA_ENV)=/app/$(DATA_FILE)')
-    const smoke = targetChunk(source, 'smoke-image')
+    const smoke = variable(source, 'SMOKE_CMD')
     expect(smoke).toContain('$(API_PATH)')
     expect(smoke).toContain('$(SMOKE_NEEDLE)')
     expect(smoke).toContain('id="root"')
   })
 
-  it('keeps local build and run on Podman without host Node', () => {
-    expect(targetChunk(source, 'image')).toContain('podman build')
-    expect(targetChunk(source, 'image')).not.toContain('npm')
+  it('keeps local run on Podman without host Node', () => {
     expect(targetChunk(source, 'run')).toContain('podman run')
     expect(targetChunk(source, 'run')).not.toContain('npm')
-    expect(source).not.toMatch(/^ci:/m)
     expect(source).not.toMatch(/^npm-package:/m)
     expect(source).not.toMatch(/^publish-npm:/m)
-    expect(source).not.toMatch(/^publish-github:/m)
-    expect(source).not.toContain('ci: host-checks')
   })
 
-  it('splits the old host checks across the job targets', () => {
-    for (const name of ['setup', 'build', 'test', 'docs', 'publish-container']) {
-      expect(targetChunk(source, name), name).toContain(`$(call SDLC_LOG,${name},_${name})`)
-    }
-    expect(targetChunk(source, 'audit')).toContain('npm audit --audit-level=high || echo "npm audit reported advisories; continuing"')
-    expect(targetChunk(source, '_setup')).toContain('npm-ci')
-    expect(targetChunk(source, '_setup')).toContain('audit')
-    expect(targetChunk(source, 'npm-ci')).toContain('$(NODE_RUN) npm ci')
-    expect(targetChunk(source, '_test')).toContain('npm test -- --coverage')
-    expect(targetChunk(source, '_test')).toContain('build/test-results/results.json')
-    expect(targetChunk(source, '_build')).toContain('linux-binary')
-    expect(targetChunk(source, '_build')).toContain('smoke-image')
-    expect(targetChunk(source, '_build')).toContain('podman save -o build/image/$(NAME)-image.tar')
-    expect(targetChunk(source, '_build')).not.toContain('npm ci')
-    expect(targetChunk(source, 'linux-binary')).toContain('$(NODE_RUN) npm run package:binary')
-    expect(targetChunk(source, 'smoke-linux-binary')).toContain(
-      '$(NODE_RUN) node scripts/smoke-binary.mjs build/$(NAME)',
-    )
-    expect(source.match(/\$\(NODE_RUN\) npm ci/g)).toHaveLength(1)
-    expect(targetChunk(source, 'deps')).toContain('build/deps/node_modules.tar')
-    expect(source).not.toContain('tee build/logs/publish-npm.log')
-    expect(source).not.toContain('tee build/logs/npm-package.log')
-    expect(source).not.toContain('tee build/logs/prune-package-versions.log')
-    expect(targetChunk(source, '_docs')).toContain('node scripts/render-docs.mjs')
-    const matchCi = [...source.matchAll(/^([a-z0-9-]+):.*?## Match CI/gm)].map((match) => match[1])
-    expect(matchCi).toEqual(['setup', 'build', 'test', 'docs', 'login', 'publish-container'])
-    expect(sdlc.toString('utf8')).toContain('tee build/logs/$(1).log')
-  })
-
-  it('builds the CI image once, smokes it, and publishes the lines from publish-tags', () => {
-    expect(source).toContain('smoke-image: image')
-    expect(source).not.toMatch(/^ci-image:/m)
-    const image = targetChunk(source, 'image')
-    expect(image).toContain('podman build')
-    expect(image).toContain('-t "$(CI_IMAGE)"')
-    expect(image).toContain('-t "$(IMAGE)"')
-    expect(image).not.toMatch(/\bpush\b/)
-    expect(targetChunk(source, 'smoke-image')).toContain('id="root"')
-    expect(targetChunk(source, 'smoke-image')).toContain('podman run')
-    expect(targetChunk(source, 'smoke-image')).not.toContain('podman build')
-    const publish = targetChunk(source, '_publish-container')
-    expect(publish).toContain('podman load -i build/image/$(NAME)-image.tar')
-    expect(publish).toContain('$(THIS_MAKE) -s --no-print-directory version')
-    expect(publish).toContain('build/publish-version.txt')
-    expect(publish).toContain('podman push "$(IMAGE):$$tag"')
-    expect(publish).toContain('$(THIS_MAKE) -s --no-print-directory publish-tags')
-    expect(publish).toContain('for tag in $$tags')
-    expect(publish).not.toContain('for tag in "$$version" latest')
-    expect(publish).not.toContain('podman build')
-    expect(publish).not.toContain('sha-')
-    expect(publish).not.toMatch(/\bedge\b/)
-    expect(publish).not.toContain('container-tags.mjs')
-    expect(publish).not.toMatch(/\$\(MAKE\)/)
-    expect(publish.indexOf('build/publish-version.txt')).toBeLessThan(publish.indexOf('podman push'))
-    const login = targetChunk(source, 'login')
-    expect(login).toContain('podman login ghcr.io --username')
-    expect(login).toContain('--password-stdin')
-    expect(login).toContain('REGISTRY_USER')
-    expect(login).toContain('REGISTRY_TOKEN')
-    expect(login).toContain('Match CI')
-    expect(login).not.toMatch(/\$\(MAKE\)/)
-  })
-
-  it('keeps release commands that can run locally, and gates publish', () => {
-    expect(source).not.toMatch(/^macos-package:/m)
-    expect(source).not.toMatch(/^macos-binary:/m)
-    expect(source).not.toMatch(/^publish-github:/m)
-    expect(source).not.toMatch(/^release-assets:/m)
-    expect(source).not.toMatch(/^npm-package:/m)
-    expect(source).not.toMatch(/^publish-npm:/m)
-    expect(source).not.toContain('scripts/release-notes.mjs')
-    expect(source).not.toContain('SHA256SUMS')
-    expect(source).not.toContain('gh release')
-    expect(source).not.toContain('dashboard-macos')
-    expect(source).not.toContain('NPM_PUBLISH')
-    expect(source).not.toContain('npm publish')
-    const container = targetChunk(source, '_publish-container')
-    expect(container).toContain('build/summaries/publish-container.md')
-    expect(container).toContain('Status: pushed')
-    expect(container).not.toContain('gh release')
-    expect(container).not.toContain('sha-')
-    expect(container).not.toMatch(/\bedge\b/)
+  it('sets the command variables of the contract to the old job work', () => {
+    const setup = variable(source, 'SETUP_CMD')
+    expect(setup).toContain('$(NODE_RUN) npm ci')
+    expect(setup).toContain('npm audit --audit-level=high || echo "npm audit reported advisories; continuing"')
+    expect(setup).toContain('tar -cf build/deps/node_modules.tar node_modules')
+    const build = variable(source, 'BUILD_CMD')
+    expect(build).toContain('$(NODE_DEPS)')
+    expect(build).toContain('$(NODE_RUN) npm run package:binary')
+    expect(build).toContain('$(NODE_RUN) node scripts/smoke-binary.mjs build/$(NAME)')
+    expect(build).toContain('$(THIS_MAKE) --no-print-directory image-ci')
+    expect(build).not.toContain('npm ci')
+    const test = variable(source, 'TEST_CMD')
+    expect(test).toContain('npm test -- --coverage')
+    expect(test).toContain('build/test-results/results.json')
+    expect(variable(source, 'DOCS_CMD')).toContain('node scripts/render-docs.mjs')
+    expect(variable(source, 'FORMAT_CMD')).toContain('prettier --check')
+    expect(variable(source, 'FORMAT_FIX_CMD')).toContain('prettier --write')
+    expect(variable(source, 'LINT_CMD')).toContain('eslint')
+    expect(variable(source, 'INTEGRATION_CMD')).toBe('true')
+    expect(variable(source, 'COVERAGE_CMD')).toContain('$(DIFF_COVER)')
+    expect(variable(source, 'TEST_CHANGED_CMD')).toContain('vitest related --run')
+    expect(variable(source, 'NODE_DEPS')).toContain('build/deps/node_modules.tar')
+    expect(source.match(/\$\(NODE_RUN\) npm ci/g)).toHaveLength(2)
   })
 })
 
 describe('pipeline docs', () => {
   const rules = readFileSync(new URL('../docs/pipeline-rules.md', import.meta.url), 'utf8')
-  const agents = readFileSync(new URL('../AGENTS.md', import.meta.url), 'utf8')
+  const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8')
 
   it('records the version tag and that cleanup keeps the current version and one former', () => {
-    for (const text of [rules, agents]) {
+    for (const text of [rules, readme]) {
       expect(text).toContain('cleanup-container-versions')
       expect(text).not.toContain('prune-package-versions')
       expect(text).toContain('exactly one former')

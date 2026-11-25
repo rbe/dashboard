@@ -36,7 +36,15 @@ function Links({ system }: { system: System }) {
   )
 }
 
-function Tags({ system, activeTag, onTag }: { system: System; activeTag: string | null; onTag: (tag: string) => void }) {
+function Tags({
+  system,
+  activeTag,
+  onTag,
+}: {
+  system: System
+  activeTag: string | null
+  onTag: (tag: string) => void
+}) {
   if (system.tags.length === 0) return null
   return (
     <div className="tags">

@@ -1,0 +1,11 @@
+# Prettier formats the code of the project. It does not format the
+# installed skills, the build output, or the board. The scripts of
+# `record` read the board documents line by line.
+.claude/
+apm_modules/
+apm.lock.yaml
+build/
+coverage/
+dist/
+docs/
+package-lock.json

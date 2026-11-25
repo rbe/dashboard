@@ -1,3 +1,4 @@
+// id: ADR-0001
 import { describe, expect, it } from 'vitest'
 import sample from '../data/dashboard.example.md?raw'
 import { parseDashboard, sanitizeHref, serializeDashboard } from './markdown'

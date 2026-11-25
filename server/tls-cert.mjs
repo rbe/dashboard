@@ -1,12 +1,6 @@
 // Self-signed server certificate built with Node crypto, so the server,
 // the container, and the single-file binary do not need OpenSSL.
-import {
-  createPrivateKey,
-  createSign,
-  generateKeyPairSync,
-  randomBytes,
-  X509Certificate,
-} from 'node:crypto'
+import { createPrivateKey, createSign, generateKeyPairSync, randomBytes, X509Certificate } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -114,12 +108,15 @@ export function generateSelfSignedCertificate({ now = new Date(), days = CERT_DA
   const notBefore = new Date(now.getTime() - 5 * 60 * 1000)
   const notAfter = new Date(now.getTime() + days * 24 * 60 * 60 * 1000)
   const subject = commonName('localhost')
-  const extensions = der(0xa3, seq([
-    extension(OID.basicConstraints, seq([Buffer.from([0x01, 0x01, 0x00])])),
-    extension(OID.keyUsage, der(0x03, Buffer.from([0x00, 0b10100000])), true),
-    extension(OID.extKeyUsage, seq([oid(OID.serverAuth)])),
-    extension(OID.subjectAltName, subjectAltName()),
-  ]))
+  const extensions = der(
+    0xa3,
+    seq([
+      extension(OID.basicConstraints, seq([Buffer.from([0x01, 0x01, 0x00])])),
+      extension(OID.keyUsage, der(0x03, Buffer.from([0x00, 0b10100000])), true),
+      extension(OID.extKeyUsage, seq([oid(OID.serverAuth)])),
+      extension(OID.subjectAltName, subjectAltName()),
+    ]),
+  )
   const tbs = seq([
     der(0xa0, unsignedInteger(Buffer.from([2]))),
     unsignedInteger(randomBytes(16)),
