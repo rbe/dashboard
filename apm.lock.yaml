@@ -4,8 +4,9 @@ dependencies:
 - repo_url: rbe/ralfskills
   name: ralfskills
   host: github.com
-  resolved_commit: fc8261869dd50dcdefbc9f34562095937a31b3a6
-  version: unknown
+  resolved_commit: 2c28e374d8bbb9b4cdc12eb83c3fd3c886ef6a8c
+  resolved_ref: v0.3.0
+  version: 0.0.0
   package_type: skill_bundle
   deployed_files:
   - .claude/skills/api-design
@@ -156,7 +157,7 @@ dependencies:
     .claude/skills/project-report/scripts/report_links.py: sha256:09ea02d0a170d8f2e1f941bc52cf2613ad783de0915c332f846af7923a27e265
     .claude/skills/project-report/scripts/requirements.py: sha256:11f515629f8cbb4019d5bac6afe02c31102542b45777da1b353d07fe73be212f
     .claude/skills/project-report/scripts/select_tests.py: sha256:9dbfe387d1bae49270ac127c219c31ad1db34ef1a3e42b37cae37f3a08ba5fc7
-    .claude/skills/project-report/scripts/test_project_report.py: sha256:258c5d1af3b5c483f29a4b59bfa6af145c9479b2a5f3cf31a2d005ea6e694475
+    .claude/skills/project-report/scripts/test_project_report.py: sha256:15cf5ee44f38f272a5ac27468151c970d28c137ab79c2ab372242e5d3f09449a
     .claude/skills/project-setup/SKILL.md: sha256:31c53270b4c5ec746eb3aa48f284ed6f85b19b397013109bd6765e93e424ed8d
     .claude/skills/project-setup/contract.mk: sha256:0d02c5782edd4397b8b934d9f737a2acb9d8298999d266550ae069ef6975d683
     .claude/skills/project-setup/doctor.mk: sha256:bc6e68894704c0eb5aae8de47349d0d47c3a41a475d1ec6987a10b90d6c570ed
@@ -199,7 +200,7 @@ dependencies:
     .claude/skills/security/SKILL.md: sha256:4cd47ed000d20e2678e60214e37cb7e53c7d3b404d364e47e769c124a1700c31
     .claude/skills/shell/SKILL.md: sha256:3e33956ab7de3e139dc3b54d14912435711467177f70bf33d7fc263f66c116ac
     .claude/skills/ux-ui-design/SKILL.md: sha256:1ef23b6707f682c5f0ff6fe28fea774db0e618924a1750d9f60eebc8b3ac2abc
-  content_hash: sha256:4dd8f909d113504544ecd4440a1d3b093250311f6ebf56872810c9ba6ffe7763
+  content_hash: sha256:f7e6000dd51696829f56415eb42c2f13febad3713d0c13c469a2a735733ff04d
   skill_subset:
   - api-design
   - develop
@@ -692,7 +693,7 @@ deployments:
   owners:
   - rbe/ralfskills
   active_owner: rbe/ralfskills
-  content_hash: sha256:258c5d1af3b5c483f29a4b59bfa6af145c9479b2a5f3cf31a2d005ea6e694475
+  content_hash: sha256:15cf5ee44f38f272a5ac27468151c970d28c137ab79c2ab372242e5d3f09449a
 - kind: project-relative
   target: claude
   value: .claude/skills/project-setup

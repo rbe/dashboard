@@ -5,6 +5,7 @@ targets:
 dependencies:
   apm:
     - git: rbe/ralfskills
+      ref: v0.3.0
       skills:
         - plan
         - develop
