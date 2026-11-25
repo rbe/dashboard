@@ -10,3 +10,7 @@ release
 
 .DS_Store
 *.local
+
+
+# APM dependencies
+apm_modules/

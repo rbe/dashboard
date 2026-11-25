@@ -1,0 +1,10 @@
+# Gradle app image. make image copies the tested JAR to app.jar in the
+# build context and passes JRE_IMAGE. The image holds the JAR and no
+# source. No Gradle runs in this build.
+ARG JRE_IMAGE=docker.io/library/eclipse-temurin:25-jre
+
+FROM ${JRE_IMAGE}
+WORKDIR /app
+COPY app.jar app.jar
+USER 10001
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

@@ -1,0 +1,22 @@
+name: dashboard
+version: 1.0.0
+targets:
+  - claude
+dependencies:
+  apm:
+    - git: rbe/ralfskills
+      skills:
+        - plan
+        - develop
+        - review
+        - release
+        - record
+        - project-report
+        - project-setup
+        - github-pipeline
+        - migrate-docs
+        - node
+        - shell
+        - security
+        - api-design
+        - ux-ui-design

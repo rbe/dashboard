@@ -1,0 +1,37 @@
+# The image block of a project that delivers a container image from the
+# Makefile of its language skill: python, go, node, or any other. This file is
+# not a Makefile. Add its lines to the Makefile above the include, then
+# change the include from project.mk to
+# .claude/skills/github-pipeline/sdlc.mk. sdlc.mk keeps the contract
+# targets of project-setup, so setup, build, test, format, lint, and
+# coverage keep working from the command variables.
+#
+# 1. OWNER and NAME come from `git remote get-url origin`:
+#    github.com/<owner>/<name>. Set them here only to override. A project
+#    with no remote yet, or a remote on another host, sets both. The
+#    commented lines below are the place.
+# 2. Copy the Containerfile template of the language to Containerfile and
+#    `containerignore` to .containerignore.
+# 3. Copy every line below into the Makefile, above the include. Keep the
+#    lines marked "language" that the project needs. BUILD_CMD += stands
+#    after the line BUILD_CMD = of the language template.
+
+IMAGE ?= ghcr.io/$(OWNER)/$(NAME)
+PACKAGE ?= $(OWNER)/$(NAME)
+# OWNER = <github owner>
+# NAME = <image name>
+KEEP_VERSIONS ?= 2
+CI_IMAGE ?= localhost/$(NAME):ci
+PUBLISH_IMAGE = 1
+SDLC_JOBS = setup build test publish-container
+SDLC_CI = setup build editorconfig format lint test integration coverage report
+
+# language: the build argument the Containerfile reads.
+# IMAGE_BUILD_ARGS = --build-arg PYTHON_IMAGE=$(PYTHON_IMAGE)
+# IMAGE_BUILD_ARGS = --build-arg GO_IMAGE=$(GO_IMAGE)
+# language: one harmless argument for the smoke run, when the image
+# starts a program that does not exit by itself.
+# SMOKE_ARGS = --help
+# language: make build ends with the image. BUILD_CMD stays as the
+# language skill set it, and this line adds the image.
+BUILD_CMD += && $(MAKE) --no-print-directory image-ci
