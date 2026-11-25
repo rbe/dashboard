@@ -61,9 +61,9 @@ TEST_CMD = set -eu; \
 	mkdir -p build/summaries build/test-results build/coverage; \
 	$(NODE_RUN) npm test -- --coverage --reporter=default --reporter=json --outputFile.json=build/test-results/results.json; \
 	printf '\# test\n\nnpm test with coverage.\n' > build/summaries/test.md
-FORMAT_CMD = $(NODE_RUN) npm exec -- prettier --check .
-FORMAT_FIX_CMD = $(NODE_RUN) npm exec -- prettier --write .
-LINT_CMD = $(NODE_RUN) npm exec -- eslint .
+FORMAT_CMD = set -eu; $(NODE_DEPS); $(NODE_RUN) npm exec -- prettier --check .
+FORMAT_FIX_CMD = set -eu; $(NODE_DEPS); $(NODE_RUN) npm exec -- prettier --write .
+LINT_CMD = set -eu; $(NODE_DEPS); $(NODE_RUN) npm exec -- eslint .
 # There is no integration entry. make test runs every test.
 INTEGRATION_CMD = true
 # Vitest writes lcov to build/coverage. Its workers write no V8 coverage,
