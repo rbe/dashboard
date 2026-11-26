@@ -410,14 +410,14 @@ describe('Makefile CI targets', () => {
   ]
 
   it('includes the installed sdlc.mk of github-pipeline before any target', () => {
-    const include = '\ninclude .claude/skills/github-pipeline/sdlc.mk\n'
+    const include = '\ninclude .claude/skills/r-github-pipeline/sdlc.mk\n'
     const includeAt = source.indexOf(include)
     expect(includeAt).toBeGreaterThan(-1)
     expect(source.slice(0, includeAt)).not.toMatch(/^[a-zA-Z0-9_-]+:/m)
     expect(source).not.toMatch(/^-?include sdlc\.mk$/m)
     expect(source).not.toMatch(/^-?include .*project-setup\/project\.mk$/m)
     expect(existsSync(new URL('../sdlc.mk', import.meta.url))).toBe(false)
-    expect(existsSync(new URL('../.claude/skills/github-pipeline/sdlc.mk', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('../.claude/skills/r-github-pipeline/sdlc.mk', import.meta.url))).toBe(true)
     for (const name of [...contractTargets, ...sdlcTargets]) {
       expect(source, name).not.toMatch(new RegExp(`^${name}:`, 'm'))
     }
