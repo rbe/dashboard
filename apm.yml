@@ -26,3 +26,8 @@ dependencies:
         - r-observability
         - r-performance
         - r-skills-review
+        - r-onboard
+        - r-system-state-report
+        - r-board-merge-report
+        - r-board-merge
+        - r-privacy
