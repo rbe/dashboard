@@ -3,6 +3,7 @@ name: r-security
 description: Asks the security questions for r-plan and runs the security checks for r-review. Use before a slice is closed and after implementation, when the change listens, stores a secret, accepts input, or runs a command.
 kind: check
 order: 10
+stages: [r-plan, r-review]
 ---
 
 The general rules in `CLAUDE.md` apply.

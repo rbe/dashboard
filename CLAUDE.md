@@ -4,9 +4,9 @@ Local markdown dashboard for systems and links. The board is stored in a file on
 
 `CLAUDE.md` is the only entry file. The skills are under `.claude/skills/`.
 
-Stages, in order: `r-plan`, `r-develop`, `r-review`, `r-release`. A new or vague request starts at `r-plan`. A request that names a source file, a failing test, or a roadmap defect starts at `r-develop`. Other skills: `r-record`, `r-project-report`, `r-project-setup`, `r-migrate-docs`, `r-github-pipeline`, `r-skills-review`, `r-component-upgrade`, `r-upgrade-node-components`, `r-onboard`, `r-system-state-report` (say `state report`), `r-board-merge-report`, `r-board-merge`. Language skills: `r-node`, `r-shell`. Subskills `r-plan` asks and `r-review` checks: `r-security`, `r-ux-ui-design`, `r-api-design`, `r-observability`, `r-performance`, `r-privacy`. A project skill is an extra name listed here. There is no project skill.
+Stages, in order: `r-plan`, `r-develop`, `r-review`, `r-release`. A new or vague request starts at `r-plan`. A request that names a source file, a failing test, or a roadmap defect starts at `r-develop`. Other skills: `r-record`, `r-project-report`, `r-project-setup`, `r-migrate-docs`, `r-github-pipeline`, `r-skills-review`, `r-component-upgrade`, `r-upgrade-node-components`, `r-onboard`, `r-system-state-report` (say `state report`), `r-board-merge-report`, `r-board-merge`. Language skills: `r-node`, `r-shell`. Subskills `r-plan` asks and `r-review` checks: `r-security`, `r-ux-ui-design`, `r-api-design`, `r-observability`, `r-performance`, `r-privacy`. A project skill is an extra name listed here. If `CLAUDE.md` lists a project skill `<project>-<stage>`, the stage reads it after its own steps. The addendum holds only what is true for that project. There is no project skill.
 
-This project ships as a container image, with the merge into the default branch. The skills are installed with APM from `apm.yml`, and `apm.lock.yaml` pins the commit of `rbe/ralfskills`.
+This project ships as a container image, with a manual publish. The skills are installed with APM from `apm.yml`, and `apm.lock.yaml` pins the commit of `rbe/ralfskills`.
 
 ## Product
 
@@ -64,6 +64,10 @@ Gates:
 - A method does one thing or only composes other methods. Name each unit, function, method, class, and file from the domain.
 
 </general_rules>
+
+## Agents
+
+A strong model, Fable or Opus, discusses, plans, orchestrates, and reviews. Sonnet implements normal work. Haiku implements mechanical work. Each brief names the files the agent owns and the check that accepts the work. The reviewing model runs the checks itself and re-checks each claim of an agent. If a Sonnet agent fails twice on one step, the orchestrator takes over or asks the owner, and the history file names the escalation. A skill file names no model and has no `model:` field. An agent file in `.claude/agents/` names a model alias.
 
 ## Communication contract
 

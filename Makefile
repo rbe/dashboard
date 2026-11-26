@@ -14,12 +14,17 @@
 
 NAME ?= dashboard
 OWNER ?= rbe
+# PORT is the port inside the container. HOST_PORT is the port of the host
+# that make run binds. It stays above 1024, so no root privileges are needed.
 PORT ?= 4173
+HOST_PORT ?= 4173
 DEV_PORT ?= 5173
 DATA_FILE ?= data/dashboard.md
 DATA_ENV ?= DASHBOARD_FILE
 API_PATH ?= /api/dashboard
 SMOKE_NEEDLE ?= not for git
+# The page at / holds this text, the root element of the app shell.
+SMOKE_PAGE_NEEDLE ?= id="root"
 
 IMAGE_NAME ?= ghcr.io/$(OWNER)/$(NAME)
 IMAGE ?= $(IMAGE_NAME)
@@ -101,27 +106,28 @@ SMOKE_CMD = name=$(NAME)-smoke; \
 	  if podman run --rm --network "container:$$name" $(CURL_IMAGE) -fsSk "https://127.0.0.1:$(PORT)$(API_PATH)" 2>/dev/null | grep -qF '$(SMOKE_NEEDLE)'; then ok=1; break; fi; \
 	  i=$$((i + 1)); sleep 1; \
 	done; \
-	page=$$(podman run --rm --network "container:$$name" $(CURL_IMAGE) -fsSk "https://127.0.0.1:$(PORT)/" 2>/dev/null || true); \
+	if [ "$$ok" = 1 ] && [ -n '$(SMOKE_PAGE_NEEDLE)' ] && ! podman run --rm --network "container:$$name" $(CURL_IMAGE) -fsSk "https://127.0.0.1:$(PORT)/" 2>/dev/null | grep -qF '$(SMOKE_PAGE_NEEDLE)'; then ok=0; printf '%s\n' 'smoke: the page / lacks SMOKE_PAGE_NEEDLE' >&2; fi; \
 	podman rm -f "$$name" >/dev/null 2>&1 || true; \
-	test "$$ok" = 1; \
-	printf '%s\n' "$$page" | grep -q 'id="root"'
+	test "$$ok" = 1
 
 include .claude/skills/r-github-pipeline/sdlc.mk
+include .claude/skills/r-node/node.mk
 
 # Project targets.
 
 .PHONY: run stop clean
 
-run: image ## Run detached on https://127.0.0.1:PORT
+run: image ## Run detached on https://127.0.0.1:HOST_PORT
+	@test "$(HOST_PORT)" -gt 1024 || { echo "HOST_PORT $(HOST_PORT) must be above 1024." >&2; exit 1; }
 	@mkdir -p data
 	@podman rm -f $(NAME) >/dev/null 2>&1 || true
 	podman run -d --name $(NAME) \
-		-p 127.0.0.1:$(PORT):$(PORT) \
+		-p 127.0.0.1:$(HOST_PORT):$(PORT) \
 		-e PORT=$(PORT) \
 		-e $(DATA_ENV)=/app/$(DATA_FILE) \
 		-v "$(CURDIR)/data:/app/data:Z" \
 		"$(IMAGE)"
-	@echo "$(NAME) at https://127.0.0.1:$(PORT)"
+	@echo "$(NAME) at https://127.0.0.1:$(HOST_PORT)"
 
 stop: ## Stop the detached container
 	@podman rm -f $(NAME) >/dev/null 2>&1 || true

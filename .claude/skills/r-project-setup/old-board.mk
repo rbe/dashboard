@@ -20,6 +20,7 @@ OLD_BOARD_PATHS := docs/BUGS.md docs/WAVES.md docs/FEATURES.md docs/DECISIONS.md
 
 .PHONY: old-board
 
+# help-group: Board
 old-board: ## Fail when a path of the old board exists, or docs/ROADMAP.md has the old line form
 	@set -eu; \
 	found=0; \

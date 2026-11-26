@@ -12,7 +12,7 @@ PROJECT_REPORT_MK := 1
 
 PROJECT_REPORT_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 
-# Alone, as `make -f <this file> r-project-report`, no makefile has
+# Alone, as `make -f <this file> project-report`, no makefile has
 # defined $(PYTHON) yet.
 ifndef PYTHON
 include $(PROJECT_REPORT_DIR)../r-project-setup/podman-python.mk
@@ -22,10 +22,11 @@ ifeq ($(strip $(PROJECT_REPORT_CMD)),)
 PROJECT_REPORT_CMD = $(PYTHON) "$(PROJECT_REPORT_DIR)scripts/project_report.py"
 endif
 
-.PHONY: r-project-report
+.PHONY: project-report
 
 # Generated. Hand-editing build/project-report.md is a defect.
-r-project-report: ## Write the requirements map and the reviews
+# help-group: Board
+project-report: ## Write the requirements map and the reviews
 	mkdir -p build
 	rm -f build/project-report.md
 	$(PROJECT_REPORT_CMD) > build/project-report.md.tmp || { rm -f build/project-report.md.tmp; exit 1; }

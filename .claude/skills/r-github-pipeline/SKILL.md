@@ -15,14 +15,16 @@ This skill owns the GitHub delivery contract and `sdlc.mk`, the makefile that im
 2. Read `references/setup-files.md`. Read each project file that it lists.
 3. Write `Makefile` when the include `.claude/skills/r-github-pipeline/sdlc.mk` is missing or stands after a target, or when a required target has no recipe and no command variable. If the Makefile includes `project.mk`, switch the include as `references/setup-files.md` says. Read `references/makefile.md` before you write a variable, a target, or a recipe.
 4. Write `.github/workflows/ci.yml`. If there is no workflow, start from the template of the toolchain. If `ci.yml` exists, fix only a trigger, a permission, a missing `retention-days`, or a `run:` step that is not `make <target>`. Read `references/workflow.md` for the rules.
-5. If `docs/pipeline-rules.md` is missing, copy `templates/pipeline-rules.md` and fill "This repository". If the file exists, leave "This repository" and "Divergences" as written.
-6. If `Containerfile`, `.containerignore`, or `.gitignore` is missing, copy the template of the toolchain. In `Containerfile`, change the paths and the start command to those of the project. If `.containerignore` or `.gitignore` exists, add only the template lines that are missing.
-7. Run `make setup`, `make build`, and `make test`. If one of them runs no recipe or prints that there is nothing to do, the include switch lost a contract target. Repair the Makefile.
-8. Write each divergence under "Divergences" in `docs/pipeline-rules.md`. Read `references/contract.md` for the divergences that the contract allows.
+5. If the project has `client/package.json` and no `.github/workflows/publish-client.yml`, copy `templates/publish-client.yml` to that path. Write the second workflow under "Divergences" in `docs/pipeline-rules.md`.
+6. If `docs/pipeline-rules.md` is missing, copy `templates/pipeline-rules.md` and fill "This repository". If the file exists, leave "This repository" and "Divergences" as written.
+7. If `Containerfile`, `.containerignore`, or `.gitignore` is missing, copy the template of the toolchain. In `Containerfile`, change the paths and the start command to those of the project. If `.containerignore` or `.gitignore` exists, add only the template lines that are missing.
+8. Run `make setup`, `make build`, and `make test`. If one of them runs no recipe or prints that there is nothing to do, the include switch lost a contract target. Repair the Makefile.
+9. Write each divergence under "Divergences" in `docs/pipeline-rules.md`. Read `references/contract.md` for the divergences that the contract allows.
 </steps>
 <rules>
-- Add no tag trigger.
-- Add no workflow beside `ci.yml` and delete no workflow. Name a second workflow file in the report.
+- Add no tag trigger to `ci.yml`.
+- A container uses a standard port inside. A host binding of `make run` uses a port above 1024, for example 8443, so no root privileges are needed.
+- Add no workflow beside `ci.yml` and `publish-client.yml`, and delete no workflow. Name a third workflow file in the report.
 - Leave the bytes of a root `sdlc.mk` and name it in the report. A root `sdlc.mk` is off the contract.
 </rules>
 </mode>
@@ -42,8 +44,9 @@ This skill owns the GitHub delivery contract and `sdlc.mk`, the makefile that im
 <rules>
 - Each job id of the workflow is a Make target. `setup`, `build`, `test`, and `docs` come from the `r-project-setup` contract. `publish-container`, `publish-github`, and `report` come from this skill. `login` is a target that the publish job runs, not a job.
 - The project Makefile includes the installed `sdlc.mk` before any target. Do not copy `sdlc.mk` to the repository root, and do not edit a file of this skill.
-- The workflow is one file, `.github/workflows/ci.yml`, named `CI`. A step is `actions/checkout`, an artifact upload or download, or `run: make <target>`.
-- `publish-*` runs only on a push to the default branch or when `workflow_dispatch` selects that job. It needs `build` and `test`. A tag push publishes nothing.
+- The workflow is one file, `.github/workflows/ci.yml`, named `CI`. A step is `actions/checkout`, an artifact upload or download, or `run: make <target>`. A project with `client/package.json` also has `publish-client.yml`. It publishes the client package, not the image, and `ci.yml` does not call it. It runs only on a tag or `workflow_dispatch`, which a human starts, and the package is small, so it needs no `AUTO_PUBLISH`.
+- By default only a human publishes a large artifact, such as a container image, to a registry, with `workflow_dispatch`. This keeps the project inside the GitHub quotas for storage, artifacts, and minutes. A project opts in to a publish on every push to the default branch with the repository variable `AUTO_PUBLISH` set to `true`. `publish-*` needs `build` and `test`. A tag push publishes nothing, and `make ci` publishes nothing.
+- Before a `v*` tag is pushed, `make check-tag TAG=vX.Y.Z` must pass: the tag is new, newer than every strict tag, and at the tip of the default branch.
 - A published version comes only from `make version`. A cleanup does not call it. A cleanup needs no git tag, and it keeps `PUBLISHED_TAG`, else the version in `build/publish-version.txt`, else the newest rolling version that GitHub lists.
 - Every upload sets `retention-days`.
 - The contract allows no second name for one target and no Docker in place of Podman.

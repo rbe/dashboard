@@ -3,6 +3,7 @@ name: r-observability
 description: Asks the observability questions for r-plan and runs the observability checks for r-review. Use before a slice is closed and after implementation, when the change starts a program, prints a message, writes a log line, or can fail.
 kind: check
 order: 50
+stages: [r-plan, r-review]
 ---
 
 The general rules in `CLAUDE.md` apply.

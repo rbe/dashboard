@@ -3,6 +3,7 @@ name: r-ux-ui-design
 description: Asks the interaction questions for r-plan and runs the interaction checks for r-review. Use before a slice is closed and after implementation, when the change has a screen, a control, or a visual.
 kind: check
 order: 30
+stages: [r-plan, r-review]
 ---
 
 The general rules in `CLAUDE.md` apply.

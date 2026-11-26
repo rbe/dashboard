@@ -3,6 +3,7 @@ name: r-privacy
 description: Asks the privacy questions for r-plan and runs the privacy checks for r-review. Use before a slice is closed and after implementation, when the change stores, logs, exports, or shows personal data.
 kind: check
 order: 20
+stages: [r-plan, r-review]
 ---
 
 The general rules in `CLAUDE.md` apply.

@@ -4,7 +4,7 @@
 import sys
 from pathlib import Path
 
-COLUMNS = ("name", "kind", "order", "files", "names")
+COLUMNS = ("name", "kind", "order", "files", "names", "stages")
 
 
 def repo_root(start):
@@ -96,6 +96,9 @@ def rows(root):
                 else [],
                 "names": data.get("names", [])
                 if isinstance(data.get("names", []), list)
+                else [],
+                "stages": data.get("stages", [])
+                if isinstance(data.get("stages", []), list)
                 else [],
             }
         )

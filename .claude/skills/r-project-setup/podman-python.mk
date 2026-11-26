@@ -25,6 +25,7 @@ PYTHON = podman run --rm $(PYTHON_USERNS) --user $(PYTHON_UID):$(PYTHON_GID) \
 
 .PHONY: py
 
+# help-group: Tools
 py: ## Run Python in Podman on this machine. Set ARGS.
 	@set -eu; \
 	if [ -z "$(ARGS)" ]; then printf '%s\n' "py: set ARGS to the Python arguments." >&2; exit 1; fi

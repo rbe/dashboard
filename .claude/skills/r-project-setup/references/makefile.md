@@ -35,24 +35,28 @@ Make reads `RENDER_DOCS` and `PUBLISH_IMAGE` while it parses `project.mk`. Set t
 | `integration` | Always | Runs the one integration entry |
 | `coverage` | Always | Writes the diff-cover report of the lines that this change touched |
 | `test-changed` | Always | Runs the tests that cover the files in the diff |
+| `check-docs` | Always | Fails when a skill text names a path under `skills/r-*/` or `.claude/skills/r-*/` that does not exist, or a `make` target that no makefile defines. `test` runs it first |
 | `old-board` | Always | Prints each path of the old board that exists, and a `docs/ROADMAP.md` in the old line form. Fails when one of these nine checks finds something |
 | `skills-install` | Always | Installs the skills that `apm.yml` names. `DRY_RUN=1` prints the plan and changes nothing |
 | `skills-update` | Always | Updates the skills to the version that `apm.yml` allows. `DRY_RUN=1` prints the plan and changes nothing |
 | `apm` | Always | Runs any other APM command: `make apm ARGS='...'` |
 | `py` | Always | Runs Python in Podman: `make py ARGS='...'` |
-| `r-project-report` | When that skill is installed | Writes `build/project-report.md` |
+| `project-report` | When that skill is installed | Writes `build/project-report.md` |
 | `docs` | Only when the repository renders docs | Runs the renderer |
 | `login` | Only when an image is published | Reads `REGISTRY_USER` and `REGISTRY_TOKEN` and runs `podman login` on `REGISTRY` |
 
 `build`, `test`, and `docs` are stubs. If the command variable is empty, the target fails and names the variable.
 
-`help` lists `setup`, `build`, `test`, `test-changed`, and `r-project-report`. It lists `docs` and `login` only when those targets exist.
+`help` lists `setup`, `build`, `test`, `test-changed`, and `project-report`. It lists `docs` and `login` only when those targets exist.
+
+`help` prints the targets in groups. The groups are `Gates`, `Project`, `Board`, `Delivery`, and `Tools`, in that order, and `HELP_GROUPS` holds the order. In a makefile, the line `# help-group: <Name>` puts the targets that follow it in that group. The first line of each file starts in `Project`, so a target of the product Makefile is listed there. A group that `HELP_GROUPS` does not name prints after those, and a group with no target prints no heading. A makefile of this collection that defines a target with a `##` comment has the marker before its first target.
 
 ## Variables
 
 | Variable | Meaning |
 | --- | --- |
 | `HELP_LEAD` | The first line of `make help`. `project.mk` has a default |
+| `HELP_GROUPS` | The groups of `make help`, in print order. Default `Gates Project Board Delivery Tools` |
 | `SETUP_CMD` | How this project resolves dependencies. Empty fails `setup` |
 | `BUILD_CMD` | How this project produces the artifact. Empty fails `build` |
 | `TEST_CMD` | How this project runs the unit tests. Empty fails `test` |
@@ -81,15 +85,17 @@ The language skill names the tool of `FORMAT_CMD`, `LINT_CMD`, `COVERAGE_CMD`, a
 | File | Provides |
 | --- | --- |
 | `project.mk` | `help`, and the includes of every file below |
-| `contract.mk` | `setup`, `build`, `test`, the quality targets, `r-project-report`, and `docs` and `login` when the variables say so |
+| `help.mk` | `HELP_GROUPS` and `HELP_LIST`, the awk command that `help` runs. `project.mk` and `sdlc.mk` include it |
+| `contract.mk` | `setup`, `build`, `test`, the quality targets, `project-report`, and `docs` and `login` when the variables say so |
 | `doctor.mk` | `doctor` |
 | `skills.mk` | `skills-install`, `skills-update`, `apm` |
 | `old-board.mk` | `old-board` |
 | `test-changed.mk` | `test-changed` |
+| `check-docs.mk` | `check-docs` |
 | `podman-python.mk` | `$(PYTHON)` and `py` |
 | `tools.mk` | The images and versions of editorconfig-checker, diff-cover, and APM |
 
-The `sdlc.mk` of `r-github-pipeline` includes the same `contract.mk`, `doctor.mk`, `skills.mk`, `old-board.mk`, and `test-changed.mk`. The targets stay when a project changes from `project.mk` to `sdlc.mk`. A repository on `sdlc.mk` defines its own project targets.
+The `sdlc.mk` of `r-github-pipeline` includes the same `contract.mk`, `doctor.mk`, `skills.mk`, `old-board.mk`, `test-changed.mk`, and `check-docs.mk`. The targets stay when a project changes from `project.mk` to `sdlc.mk`. A repository on `sdlc.mk` defines its own project targets.
 
 `project.mk` marks each standard target `.PHONY`. Without that mark, a `build/` directory satisfies `build`.
 

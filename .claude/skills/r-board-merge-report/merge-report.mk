@@ -24,6 +24,7 @@ endif
 
 .PHONY: board-numbers
 
+# help-group: Board
 board-numbers: ## List words, tests with their names, and links of each board unit. IDS= narrows it
 	$(PYTHON) "$(BOARD_MERGE_REPORT_DIR)scripts/board_numbers.py" $(IDS)
 

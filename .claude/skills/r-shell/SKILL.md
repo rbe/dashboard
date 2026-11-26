@@ -4,6 +4,7 @@ description: Sets the rules for POSIX shell inside a Make recipe. Use when r-she
 kind: language
 files: [sh]
 names: [Makefile]
+stages: [r-develop]
 ---
 
 The general rules in `CLAUDE.md` apply.

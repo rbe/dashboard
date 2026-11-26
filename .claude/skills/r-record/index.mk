@@ -42,6 +42,7 @@ endif
 
 .PHONY: toon ids id id-raise req links links-check
 
+# help-group: Board
 toon: ## Write the ADR or requirements index, and the skill index
 	$(PYTHON) "$(RECORD_DIR)scripts/toon.py"
 

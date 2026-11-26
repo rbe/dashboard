@@ -8,7 +8,8 @@
 # include sdlc.mk from the installed skill before any target. sdlc.mk
 # already defines help, so leave project.mk out. sdlc.mk adds the
 # contract targets, the image targets, version, publish tags, cleanup,
-# and report.
+# and report. node.mk of the r-node skill follows sdlc.mk and adds
+# `make npm` and `make node-tooling`.
 
 NAME ?= app
 OWNER ?= owner
@@ -20,12 +21,19 @@ KEEP_VERSIONS ?= 2
 NODE_VERSION ?= 24
 NODE_IMAGE ?= docker.io/library/node:$(NODE_VERSION)-bookworm-slim
 CI_IMAGE ?= localhost/$(NAME):ci
+# PORT is the port inside the container, and the container may use a
+# standard port. HOST_PORT is the port of the host that `make run`
+# binds. It stays above 1024, so no root privileges are needed.
 PORT ?= 4173
+HOST_PORT ?= 8173
 # curl runs in this image for the smoke check of make build. It joins
 # the network of the smoke container, so no port of the host is used.
 CURL_IMAGE ?= docker.io/curlimages/curl:8.17.0
 SMOKE_PATH ?= /api/health
 SMOKE_NEEDLE ?= ok
+# The page at / of a single-page app holds this text, such as the root
+# element of the app shell. Empty turns the page check off.
+SMOKE_PAGE_NEEDLE ?= id="root"
 DATA_DIR ?= data
 DATA_ENV ?= APP_DATA
 
@@ -99,19 +107,22 @@ SMOKE_CMD = name=$(NAME)-smoke; \
 	  if podman run --rm --network "container:$$name" $(CURL_IMAGE) -fsSk "https://127.0.0.1:$(PORT)$(SMOKE_PATH)" 2>/dev/null | grep -qF '$(SMOKE_NEEDLE)'; then ok=1; break; fi; \
 	  i=$$((i + 1)); sleep 1; \
 	done; \
+	if [ "$$ok" = 1 ] && [ -n '$(SMOKE_PAGE_NEEDLE)' ] && ! podman run --rm --network "container:$$name" $(CURL_IMAGE) -fsSk "https://127.0.0.1:$(PORT)/" 2>/dev/null | grep -qF '$(SMOKE_PAGE_NEEDLE)'; then ok=0; printf '%s\n' 'smoke: the page / lacks SMOKE_PAGE_NEEDLE' >&2; fi; \
 	podman rm -f "$$name" >/dev/null 2>&1 || true; \
 	test "$$ok" = 1
 
 include .claude/skills/r-github-pipeline/sdlc.mk
+include .claude/skills/r-node/node.mk
 
 # Project targets.
 
 .PHONY: run stop clean
 
-run: image ## Run detached on https://127.0.0.1:PORT
+run: image ## Run detached on https://127.0.0.1:HOST_PORT
+	@test "$(HOST_PORT)" -gt 1024 || { echo "HOST_PORT $(HOST_PORT) must be above 1024." >&2; exit 1; }
 	@mkdir -p "$(DATA_DIR)"
 	@podman rm -f $(NAME) >/dev/null 2>&1 || true
-	podman run -d --name $(NAME) -p 127.0.0.1:$(PORT):$(PORT) -e PORT=$(PORT) \
+	podman run -d --name $(NAME) -p 127.0.0.1:$(HOST_PORT):$(PORT) -e PORT=$(PORT) \
 		-e $(DATA_ENV)=/app/data -v "$(CURDIR)/$(DATA_DIR):/app/data:Z" "$(IMAGE)"
 
 stop: ## Stop the detached container

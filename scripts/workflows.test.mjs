@@ -230,7 +230,10 @@ describe('workflow', () => {
     }
   })
 
-  it('publishes the image from the default branch, or from a manual run of that job', () => {
+  it('publishes the image from a manual run of that job, or from the default branch when AUTO_PUBLISH is true', () => {
+    expect(pipeline['publish-container']).toContain(
+      "github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && vars.AUTO_PUBLISH == 'true'",
+    )
     expect(pipeline['publish-container']).toContain("inputs.job == 'publish-container'")
     expect(pipeline['publish-container']).toContain("github.event_name == 'workflow_dispatch'")
     expect(pipeline['publish-container']).toContain("github.event_name == 'push'")
@@ -398,6 +401,8 @@ describe('Makefile CI targets', () => {
     'image',
     'image-ci',
     'publish-container',
+    'npm',
+    'node-tooling',
   ]
   const sdlcTargets = [
     'version',
@@ -410,7 +415,7 @@ describe('Makefile CI targets', () => {
   ]
 
   it('includes the installed sdlc.mk of github-pipeline before any target', () => {
-    const include = '\ninclude .claude/skills/r-github-pipeline/sdlc.mk\n'
+    const include = '\ninclude .claude/skills/r-github-pipeline/sdlc.mk\ninclude .claude/skills/r-node/node.mk\n'
     const includeAt = source.indexOf(include)
     expect(includeAt).toBeGreaterThan(-1)
     expect(source.slice(0, includeAt)).not.toMatch(/^[a-zA-Z0-9_-]+:/m)
@@ -447,10 +452,14 @@ describe('Makefile CI targets', () => {
       expect(source, key).toMatch(new RegExp(`^${key} \\?= \\S`, 'm'))
     }
     expect(targetChunk(source, 'run')).toContain('$(DATA_ENV)=/app/$(DATA_FILE)')
+    expect(source).toMatch(/^HOST_PORT \?= \d{4,5}$/m)
+    expect(targetChunk(source, 'run')).toContain('-p 127.0.0.1:$(HOST_PORT):$(PORT)')
+    expect(targetChunk(source, 'run')).toContain('-gt 1024')
     const smoke = variable(source, 'SMOKE_CMD')
     expect(smoke).toContain('$(API_PATH)')
     expect(smoke).toContain('$(SMOKE_NEEDLE)')
-    expect(smoke).toContain('id="root"')
+    expect(source).toMatch(/^SMOKE_PAGE_NEEDLE \?= id="root"$/m)
+    expect(smoke).toContain('$(SMOKE_PAGE_NEEDLE)')
   })
 
   it('keeps local run on Podman without host Node', () => {

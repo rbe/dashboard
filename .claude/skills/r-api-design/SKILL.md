@@ -3,6 +3,7 @@ name: r-api-design
 description: Gives the questions that r-plan asks and the checks that r-review runs for the shape of an API. Use when the change adds or alters an HTTP route, a body, a status code, or what a module or a library exports.
 kind: check
 order: 40
+stages: [r-plan, r-review]
 ---
 
 The general rules in `CLAUDE.md` apply.

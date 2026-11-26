@@ -26,6 +26,7 @@ include $(SKILLS_MK_DIR)tools.mk
 
 .PHONY: skills-install skills-update apm
 
+# help-group: Tools
 skills-install: ## Install the skills that apm.yml names. DRY_RUN=1 changes nothing
 	@set -eu; \
 	if [ ! -f apm.yml ]; then printf '%s\n' "skills-install: apm.yml is missing. The README of the collection has the file." >&2; exit 1; fi
