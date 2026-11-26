@@ -5,7 +5,7 @@ dependencies:
   name: ralfskills
   host: github.com
   resolved_commit: cbb33808506e05b90fe4ed5c4b59618650cc398d
-  resolved_ref: cbb33808506e05b90fe4ed5c4b59618650cc398d
+  resolved_ref: v0.5.0
   version: 0.0.0
   package_type: skill_bundle
   deployed_files:
