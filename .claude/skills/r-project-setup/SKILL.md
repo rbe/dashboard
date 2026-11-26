@@ -13,7 +13,7 @@ This skill owns the Make contract: the Makefile, the standard targets, `CLAUDE.m
 <steps>
 1. Ask the owner how the project ships: as a binary, as a container image, as a library package, or with the merge only. A project that ships nothing answers with the merge only. Copy no template before the answer.
 2. Write the Makefile.
-   - If the project has no Makefile, ask which installed language skill the project uses. Write the Makefile from the template of that skill with the file tool: `templates/Makefile.python` in `r-python`, `templates/Makefile.node` in `r-node`, `templates/Makefile.gradle` in `r-jvm`, or `templates/Makefile.golang` in `r-go`. Write the other files that the comment at the top of the template names the same way.
+   - If the project has no Makefile, ask which installed language skill the project uses. Write the Makefile from the template of that skill with the file tool: `templates/Makefile.python` in `r-python`, `templates/Makefile.node` in `r-node`, `templates/Makefile.gradle` in `r-jvm`, or `templates/Makefile.golang` in `r-go`. Write the other files that the comment at the top of the template names the same way. The template includes the language file of that skill after `project.mk`: `node.mk`, `python.mk`, `go.mk`, or `jvm.mk`. That file has the language targets, so the Makefile holds no copy of them.
    - For an existing Makefile, add only the lines of the template that it lacks.
    - The Makefile sets the variables, then includes `.claude/skills/r-project-setup/project.mk` before any target. If it includes `.claude/skills/r-github-pipeline/sdlc.mk`, leave this include out. That file provides `help` and the same targets.
 3. Fill the command variables. Read `references/makefile.md` for the variables. Read `references/setup-cases.md`, "A command variable", before you set one, and when a recipe runs a tool on the host.
@@ -59,7 +59,7 @@ This skill owns the Make contract: the Makefile, the standard targets, `CLAUDE.m
 
 <rules>
 - Setup mode leaves a target that the project already filled in.
-- `help` is the default goal. A project Makefile sets `.DEFAULT_GOAL` to no other target. A `##` comment on the target line is the text that `help` prints.
+- `help` is the default goal. A project Makefile sets `.DEFAULT_GOAL` to no other target. A `##` comment on the target line is the text that `help` prints. `help` groups the targets as `help.mk` says. A target of the product Makefile is in the group `Project`.
 - The standard targets, and when each exists, are in `references/makefile.md`.
 - A target does the same thing on a laptop and in CI. A command that only makes sense on a laptop gets its own name, such as `dev` or `verify`.
 - A target is filled in when its command variable has a non-empty value, or when the Makefile of the project gives that target a recipe. `true` is a filled-in value.

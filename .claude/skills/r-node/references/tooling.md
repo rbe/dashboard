@@ -2,7 +2,8 @@
 
 ## The Makefile template
 
-- The variable `$(NODE)` runs Node and npm in Podman.
+- The variable `$(NODE)` runs Node and npm in Podman. `node.mk` sets it, with `NODE_IMAGE`, `NODE_VERSION`, and `NODE_DEV_TOOLS`.
+- `node.mk` has the targets `npm` and `node-tooling`. The Makefile includes it with `include .claude/skills/r-node/node.mk` after `project.mk` or `sdlc.mk`. To change a variable of `node.mk`, set it before that include.
 - `templates/Makefile.node` fills in each command variable for `node --test`, Prettier, and ESLint.
 - `templates/prettierignore` and `templates/eslint.config.mjs` are the files that Prettier and ESLint need.
 

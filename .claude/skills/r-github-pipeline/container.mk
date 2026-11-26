@@ -48,6 +48,7 @@ PUBLISH_PREPARE ?= if ! podman image inspect "$(CI_IMAGE)" >/dev/null 2>&1; then
 
 .PHONY: image image-ci publish-container
 
+# help-group: Delivery
 image: ## Build the image
 	@set -eu; \
 	case "$(IMAGE)" in \

@@ -14,7 +14,7 @@ The general rules in `CLAUDE.md` apply.
    If there is none, create the branch of the slice with `git checkout -b <slug>` and ask `r-record` for a history file.
    The Plan section is then one sentence that says why `r-plan` was not invoked.
    If the slice starts from a proposal, the Plan section cites the proposal id.
-2. Read `docs/skill-index.toon`. Invoke each `language` row whose `files` or `names` match the files in hand.
+2. Read `docs/skill-index.toon`. Invoke each row whose `stages` names `r-develop` and whose `files` or `names` match the files in hand.
    Stop when a file set has no matching row.
    A document, such as `README.md` or a file under `docs/`, needs no language row.
 3. Read `docs/adr/index.toon`. Open each ADR whose status is `Accepted` and whose `skills` names a skill that this slice uses.

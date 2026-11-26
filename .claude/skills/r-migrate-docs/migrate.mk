@@ -25,6 +25,7 @@ include $(MIGRATE_MK_DIR)../r-project-setup/old-board.mk
 
 .PHONY: old-board-delete
 
+# help-group: Board
 old-board-delete: ## Delete the eight paths of the old board
 	@set -eu; \
 	for path in $(OLD_BOARD_PATHS); do \

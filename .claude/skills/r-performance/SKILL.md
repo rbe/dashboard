@@ -3,6 +3,7 @@ name: r-performance
 description: Asks the performance questions for r-plan and runs the performance checks for r-review. Use before a slice is closed and after implementation, when the change reads, parses, imports, or aggregates data, or claims a gain in speed, size, or quality.
 kind: check
 order: 60
+stages: [r-plan, r-review]
 ---
 
 The general rules in `CLAUDE.md` apply.

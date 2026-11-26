@@ -3,6 +3,7 @@ name: r-node
 description: Node and TypeScript. Applies the Node rules to a change. Use when r-node is installed and the files in hand are JavaScript or TypeScript. A framework named in CLAUDE.md is a reference file beside this skill. The stage skill still applies.
 kind: language
 files: [js, jsx, ts, tsx, mjs, cjs]
+stages: [r-develop]
 ---
 
 The general rules in `CLAUDE.md` apply.
@@ -21,12 +22,13 @@ This skill names the tools and the Make targets for JavaScript and TypeScript fi
 <rules>
 - The formatter is Prettier. The linter is ESLint, also for TypeScript.
 - The comment at the top of `templates/Makefile.node` explains each command.
+- The targets `npm` and `node-tooling` are in `node.mk` beside this skill. The Makefile includes it after `project.mk`.
 - A library sets `exports` and `files` in `package.json`. `make build` then packs only the source. `references/tooling.md` has the command.
 - A framework file does not replace this skill or the stage skill.
 </rules>
 
 <references>
-- `references/tooling.md`: read it before you run `make node-tooling`, when you change `templates/Makefile.node`, or when the project is a library.
+- `references/tooling.md`: read it before you run `make node-tooling`, when you change `templates/Makefile.node` or `node.mk`, or when the project is a library.
 - `references/coverage.md`: read it when the test runner is not `node --test`, or when `make coverage` or `make test-changed` fails.
 - `references/frameworks.md` and a file named by a framework: read them when `CLAUDE.md` names that framework.
 </references>

@@ -24,6 +24,8 @@ The project sets the command variables of `r-project-setup` above the include. I
 | `SDLC_JOBS` | The jobs that the pipeline report lists. Add `publish-github` when that job exists |
 | `SDLC_CI` | The targets that `ci` runs, in order. The default is `setup build editorconfig format lint test integration coverage docs report`. Remove `docs` when there is no docs target |
 | `SDLC_KEEP_ARTIFACTS` | The artifact names that the hourly cleanup does not delete. The default is `report,docs` |
+| `SMOKE_PATH`, `SMOKE_NEEDLE`, `SMOKE_PAGE_NEEDLE` | In `templates/Makefile.node`: the API path and its needle, and the text that the page at `/` must hold. The defaults are `/api/health`, `ok`, and `id="root"`. An empty `SMOKE_PAGE_NEEDLE` turns the page check off |
+| `PORT`, `HOST_PORT` | In `templates/Makefile.node`: the port inside the container, and the port of the host that `make run` binds. `HOST_PORT` stays above 1024 and `run` fails below it |
 | `HELP_LEAD` | The first line of `make help` |
 | `GH_BASE_IMAGE`, `GH_VERSION` | The base image and the release of the GitHub CLI image |
 | `OWNER`, `NAME` | The GitHub owner and the repository name. `ci-status` passes them as `-R owner/name`, and `pull-request` and `pull-request-merge` put them in the REST route, because the image has no Git |
@@ -40,10 +42,11 @@ The project sets the command variables of `r-project-setup` above the include. I
 
 | Target | Contract |
 | --- | --- |
-| `help` | The default goal. It lists every target that has a `##` comment. One include is sufficient, because `sdlc.mk` defines `help` |
+| `help` | The default goal. It lists every target that has a `##` comment, in the groups of `help.mk` in `r-project-setup`. One include is sufficient, because `sdlc.mk` defines `help` |
 | `version` | Prints `MAJOR.MINOR.PATCH-run` from `git describe`. `PRINT=tag` prints the `vX.Y.Z` tag. Fails when there is no strict tag, when a pre-release tag is nearer, or when `GITHUB_RUN_NUMBER` is not set |
 | `ci` | Runs `SDLC_CI` in order. Does not publish |
 | `report` | Writes `build/report/index.md` from logs, summaries, and `JOB_RESULT_*` |
+| `check-tag` | Run it before the tag is pushed, as `make check-tag TAG=vX.Y.Z`. Fails unless `TAG` is `vMAJOR.MINOR.PATCH`, does not exist, is newer than every strict `v*` tag, and `HEAD` is the tip of the default branch |
 | `publish-tags` | Prints the version. Prints `latest` only when the ref is the default branch or `GITHUB_REF` is not set |
 | `gh-image` | Builds the image of the GitHub CLI, one time |
 | `ci-status` | Prints the result of the CI run for `HEAD`, or for `SHA=<sha>`. Fails when the run failed, did not finish, or does not exist. `WAIT=1` waits for the end |

@@ -14,7 +14,7 @@ The general rules in `CLAUDE.md` apply.
    If a file does not exist, skip it.
    For each row of `docs/requirements-index.toon` that names a part that the change touches, run `make req ID=<ids>`.
    If the index names an ADR that this slice can change, read that ADR.
-2. For each row of `docs/skill-index.toon` with the `kind` `check`, in file order: read that skill and ask its questions.
+2. For each row of `docs/skill-index.toon` whose `stages` names `r-plan`, in file order: read that skill and ask its questions.
    If the request is too vague for these questions, do step 3 first. Ask them when the slice is one sentence.
    Write the line with the answers, as `security: no listener, no secret.`
 3. Ask the owner until the slice is one sentence with an out-of-scope line.

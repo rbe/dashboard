@@ -23,6 +23,7 @@ DOCTOR_MK := 1
 
 .PHONY: doctor podman-start
 
+# help-group: Tools
 doctor: ## Check that this machine has the tools the targets need
 	@set -u; \
 	failed=0; \

@@ -35,7 +35,7 @@ The include is `.claude/skills/r-project-setup/project.mk`. A repository that in
 | `coverage` writes `build/coverage/diff.md` for the lines this change touched | | |
 | `test-changed` selects tests from coverage of the diff and CI still runs `test` | | |
 | a test names its requirement with `id:` in the header or metadata | | |
-| `r-project-report`, when installed, writes `build/project-report.md` and that file is not hand-edited | | |
+| `project-report`, when installed, writes `build/project-report.md` and that file is not hand-edited | | |
 | `docs` exists when the repository renders docs, and is absent otherwise | | |
 | `login` exists when an image is published, and is absent otherwise | | |
 | `SETUP_CMD`, `BUILD_CMD`, and `TEST_CMD` are non-empty | | |
@@ -44,6 +44,7 @@ The include is `.claude/skills/r-project-setup/project.mk`. A repository that in
 | No `.ONESHELL`, no Make 4 function, no shell-script wrapper. GNU Make 3.81 | | |
 | `setup` runs `make doctor` first and installs no tool on the host | | |
 | `doctor`, `skills-install`, `skills-update`, and `old-board` exist | | |
+| `check-docs` exists and `test` runs it | | |
 | No recipe calls a host tool other than `git` and `podman` | | |
 
 ## Filled in

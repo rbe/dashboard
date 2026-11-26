@@ -38,7 +38,7 @@ The agent writes each document by hand from a template in `templates/` beside th
 - A frontmatter list of ids follows `references/documents.md`: ids only, one form, and no id above its counter.
 - A history file follows `references/history.md`: it holds facts only. Open work is a roadmap row, or a planned row of `docs/requirements/`.
 - A defect and an open question are roadmap rows. A question row states the choices.
-- A defect that the owner reports gets a roadmap row of the kind `defect` through `r-record`, then starts at `r-develop`. A defect with no known expected behaviour starts at `r-plan`.
+- A defect that the owner reports gets a roadmap row of the kind `defect` through `r-record`, then starts at `r-develop`. A defect with no known expected behaviour starts at `r-plan`. Read `references/defect-report.md` before you write the report of a defect.
 - A question that the owner has not answered is never in a history file.
 - To read one requirement row or one ADR, run `make req ID=<ids>`. To find rows, run `make req Q=<word>`, `OWNER=<skill>`, or `STATUS=planned`. Do not open a whole file of `docs/requirements/` for one row.
 - A deleted id has no target. After the delete, run `make links`. A history file keeps the id as it is.
@@ -55,6 +55,7 @@ The agent writes each document by hand from a template in `templates/` beside th
 - `references/adr.md`: where a choice goes, and the sections, the status, and `skills` of an ADR. Read it before you record a choice or write or supersede an ADR.
 - `references/history.md`: the rules and the content of the history file and of each section. Read it before you create a history file or write a section, and when you are not sure what a section holds.
 - `references/close.md`: the steps of close mode. Read it in close mode.
+- `references/defect-report.md`: the eight parts of a defect report and where it stands. Read it when you record a defect or when `r-review` writes a finding.
 - `references/test-ids.md`: the form of the `id:` line in each language. Read it when you write or check an `id:` line.
 - `references/indexes.md`: the files `make toon` writes, their columns, and why `make toon` fails. Read it when `make toon` fails or when a question is about an index.
 </references>

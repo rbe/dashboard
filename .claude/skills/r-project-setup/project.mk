@@ -19,9 +19,9 @@
 # in a command variable is `$$`.
 #
 # help is the default goal, set again after the included fragments.
-# It lists every target in this file that has
-# a ## comment. docs and login are listed only when that target exists.
-# The `# help-docs` and `# help-login` markers are how help knows.
+# It lists every target of the makefiles that has a ## comment, in the
+# groups of help.mk. docs and login are listed only when that target
+# exists. The `# help-docs` and `# help-login` markers are how help knows.
 #
 # setup runs make doctor, then SETUP_CMD. It installs no tool on the
 # host. The host needs make, git, and podman. Every other tool runs in a
@@ -48,25 +48,27 @@ ifndef PROJECT_MK
 PROJECT_MK := 1
 
 PROJECT_MK_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
+include $(PROJECT_MK_DIR)help.mk
 include $(PROJECT_MK_DIR)podman-python.mk
 include $(PROJECT_MK_DIR)tools.mk
 include $(PROJECT_MK_DIR)doctor.mk
 include $(PROJECT_MK_DIR)skills.mk
 include $(PROJECT_MK_DIR)old-board.mk
 include $(PROJECT_MK_DIR)test-changed.mk
+include $(PROJECT_MK_DIR)check-docs.mk
 -include .claude/skills/r-project-report/report.mk
 
 HELP_LEAD ?= Make is the only interface. A target does the same thing locally and in CI.
 
 .PHONY: help
 
+# help-group: Tools
 help: ## Show the targets
 	@printf '%s\n' "$(HELP_LEAD)"
-	@printf '%s\n' ""
-	@awk -v docs="$(RENDER_DOCS)" -v login="$(PUBLISH_IMAGE)" 'BEGIN {FS = ":.*## "}; /^# help-docs$$/ { skip = (docs != "1"); next } /^# help-login$$/ { skip = (login != "1"); next } /^endif$$/ { skip = 0; next } skip { next } /^[a-zA-Z][a-zA-Z0-9_-]*:.*## / && !seen[$$1]++ {printf "  %-32s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@$(HELP_LIST)
 
 # The targets of the Make contract: setup, build, test, editorconfig,
-# format, format-fix, lint, integration, coverage, r-project-report, and,
+# format, format-fix, lint, integration, coverage, project-report, and,
 # when the variables say so, docs and login. sdlc.mk includes the same
 # file, so a project on either include has them.
 include $(PROJECT_MK_DIR)contract.mk

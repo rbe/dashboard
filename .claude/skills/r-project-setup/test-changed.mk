@@ -14,6 +14,7 @@ TEST_CHANGED_MK := 1
 .PHONY: test-changed
 
 # Tests whose coverage includes a file in the diff. Not a CI substitute for test.
+# help-group: Gates
 test-changed: ## Run the tests that cover the diff
 ifeq ($(strip $(TEST_CHANGED_CMD)),)
 	@printf '%s\n' "test-changed: stub. Set TEST_CHANGED_CMD before the include. Select tests from coverage of the files in the diff." >&2

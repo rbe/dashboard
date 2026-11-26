@@ -17,4 +17,4 @@ If a review misses a step of a skill, check that the step is numbered and stands
 
 ## The target
 
-`report.mk` sets `PROJECT_REPORT_CMD` only when the project did not set it. A project that sets `PROJECT_REPORT_CMD` replaces the command, and `report.mk` still owns the `r-project-report` target.
+`report.mk` sets `PROJECT_REPORT_CMD` only when the project did not set it. A project that sets `PROJECT_REPORT_CMD` replaces the command, and `report.mk` still owns the `project-report` target.

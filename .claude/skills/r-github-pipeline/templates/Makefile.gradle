@@ -9,7 +9,8 @@
 # include sdlc.mk from the installed skill before any target. sdlc.mk
 # already defines help, so leave project.mk out. sdlc.mk adds the
 # contract targets, the image targets, version, publish tags, cleanup,
-# and report.
+# and report. jvm.mk of the r-jvm skill follows sdlc.mk and adds
+# `make wrapper`, `make jvm-tooling`, and `make podman-socket`.
 # A repo that does not publish a release deletes publish-github below and
 # drops it from SDLC_JOBS.
 
@@ -26,6 +27,15 @@ JRE_IMAGE ?= docker.io/library/eclipse-temurin:25-jre
 CI_IMAGE ?= localhost/$(NAME):ci
 JAR_GLOB ?= build/libs/$(NAME)-*.jar
 GRADLE ?= podman run --rm $(PODMAN_NET_ARGS) -e CI -e GRADLE_USER_HOME=/gradle -v "$$HOME/.gradle":/gradle:Z -v "$(CURDIR)":/work:Z -w /work $(JDK_IMAGE) ./gradlew --console=plain
+# A Gradle task that starts containers, such as a Testcontainers test, runs
+# through $(GRADLE_PODMAN). It is $(GRADLE) with the Podman socket of the
+# host and the host network, so the container that runs Gradle starts
+# other containers on the host, and the host needs no Java toolchain. The
+# image of that run holds a Podman client, as `CONTAINER_HOST` names the
+# socket. A target that uses it runs `make podman-socket` first.
+GRADLE_PODMAN = podman run --rm $(PODMAN_NET_ARGS) --network host --security-opt label=disable -e CI -e GRADLE_USER_HOME=/gradle \
+	-e CONTAINER_HOST=unix:///run/podman/podman.sock -v "$(PODMAN_SOCKET)":/run/podman/podman.sock \
+	-v "$$HOME/.gradle":/gradle:Z -v "$(CURDIR)":/work:Z -w /work $(JDK_IMAGE) ./gradlew --console=plain
 
 # The command variables of the contract. A # inside one is written \#.
 SETUP_CMD = set -eu; \
@@ -90,6 +100,7 @@ IMAGE_PREPARE = test -f build/dist/$(NAME).jar; \
 PUBLISH_PREPARE = $(THIS_MAKE) --no-print-directory image
 
 include .claude/skills/r-github-pipeline/sdlc.mk
+include .claude/skills/r-jvm/jvm.mk
 
 # Project targets.
 

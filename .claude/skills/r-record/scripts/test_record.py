@@ -175,13 +175,16 @@ class SkillIndexTest(unittest.TestCase):
             installed = root / ".claude" / "skills" / "node"
             installed.mkdir(parents=True)
             (installed / "SKILL.md").write_text(
-                "---\nname: node\nkind: language\nfiles: [js, ts]\n---\n",
+                "---\nname: node\nkind: language\nfiles: [js, ts]\n"
+                "stages: [r-develop]\n---\n",
                 encoding="utf-8",
             )
             check = root / ".claude" / "skills" / "security"
             check.mkdir(parents=True)
             (check / "SKILL.md").write_text(
-                "---\nname: security\nkind: check\norder: 10\n---\n", encoding="utf-8"
+                "---\nname: security\nkind: check\norder: 10\n"
+                "stages: [r-plan, r-review]\n---\n",
+                encoding="utf-8",
             )
             plain = root / ".claude" / "skills" / "plan"
             plain.mkdir(parents=True)
@@ -191,9 +194,9 @@ class SkillIndexTest(unittest.TestCase):
             found = skill_index.rows(root)
             self.assertEqual([row["name"] for row in found], ["security", "node"])
             text = skill_index.render(found)
-            self.assertIn("skill_index[2]{name,kind,order,files,names}:", text)
-            self.assertIn("security,check,10,,", text)
-            self.assertIn("node,language,,js;ts,", text)
+            self.assertIn("skill_index[2]{name,kind,order,files,names,stages}:", text)
+            self.assertIn("security,check,10,,,r-plan;r-review", text)
+            self.assertIn("node,language,,js;ts,,r-develop", text)
             self.assertNotIn("jvm", text)
             self.assertNotIn("Grill", text)
 

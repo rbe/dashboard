@@ -31,6 +31,7 @@ changed_tests = load("changed_tests", HERE / "changed_tests.py")
 node_cover_map = load("node_cover_map", HERE / "node_cover_map.py")
 jacoco_cover_map = load("jacoco_cover_map", HERE / "jacoco_cover_map.py")
 go_cover_map = load("go_cover_map", HERE / "go_cover_map.py")
+skill_index = load("skill_index", ROOT / "skills/r-record/scripts/skill_index.py")
 
 
 def write(root, relative, text):
@@ -475,6 +476,97 @@ class RequirementFilesTest(unittest.TestCase):
         self.assertNotIn("REQUIREMENTS.md", text)
 
 
+class AgentAgnosticTextTest(unittest.TestCase):
+    def test_no_skill_text_names_an_ai_coding_tool_a_tool_folder_or_a_model(self):
+        """id: R-17"""
+        names = (
+            "Cursor",
+            ".agents/",
+            ".cursor/",
+            "Fable",
+            "Opus",
+            "Sonnet",
+            "Haiku",
+        )
+        files = sorted((ROOT / "skills").glob("r-*/SKILL.md")) + sorted(
+            (ROOT / "skills").glob("r-*/references/**/*.md")
+        )
+        self.assertTrue(files)
+        for path in files:
+            text = path.read_text(encoding="utf-8")
+            for name in names:
+                self.assertNotIn(name, text, str(path))
+
+
+class StageRoutingTest(unittest.TestCase):
+    def test_every_check_and_language_skill_names_the_stages_that_load_it(self):
+        """id: R-110"""
+        found = skill_index.rows(ROOT)
+        self.assertTrue(found)
+        self.assertIn("stages", skill_index.render(found).splitlines()[0])
+        for row in found:
+            self.assertTrue(row["stages"], row["name"])
+            expected = (
+                ["r-plan", "r-review"] if row["kind"] == "check" else ["r-develop"]
+            )
+            self.assertEqual(row["stages"], expected, row["name"])
+            for stage in row["stages"]:
+                self.assertTrue((ROOT / "skills" / stage / "SKILL.md").is_file(), stage)
+
+    def test_a_stage_reads_the_stages_column_and_names_no_subskill(self):
+        """id: R-110"""
+        names = [row["name"] for row in skill_index.rows(ROOT)]
+        for stage, column in (
+            ("r-plan", "`stages` names `r-plan`"),
+            ("r-review", "`stages` names `r-review`"),
+            ("r-develop", "`stages` names `r-develop`"),
+        ):
+            steps = (ROOT / "skills" / stage / "SKILL.md").read_text(encoding="utf-8")
+            self.assertIn(column, steps)
+            for name in names:
+                self.assertNotIn(f"`{name}`", steps, f"{stage} names {name}")
+
+
+class ReviewRulesTest(unittest.TestCase):
+    def skill(self, name):
+        return (ROOT / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
+
+    def test_the_defect_report_form_has_eight_parts_with_one_owner(self):
+        """id: R-113"""
+        form = (ROOT / "skills/r-record/references/defect-report.md").read_text(
+            encoding="utf-8"
+        )
+        for number, part in enumerate(
+            (
+                "Location:",
+                "Mechanism:",
+                "Evidence:",
+                "Not a regression:",
+                "The rule it contradicts:",
+                "Fix options:",
+                "Acceptance check:",
+                "Documents to update:",
+            ),
+            1,
+        ):
+            self.assertIn(f"\n{number}. {part}", form)
+        self.assertIn("references/defect-report.md", self.skill("r-record"))
+        review = self.skill("r-review")
+        self.assertIn("the defect report form of `r-record`", review)
+        self.assertNotIn("the mechanism", review)
+
+    def test_only_the_release_skill_states_the_staging_rule(self):
+        """id: R-114"""
+        rule = "Never run `git add -A`, `git add .`, or `git commit -a`."
+        self.assertIn(
+            "Stage only the files of the change, by name.", self.skill("r-release")
+        )
+        self.assertIn(rule, self.skill("r-release"))
+        for path in (ROOT / "skills").glob("r-*/SKILL.md"):
+            if path.parent.name != "r-release":
+                self.assertNotIn("git add -A", path.read_text(encoding="utf-8"))
+
+
 class GeneralRulesTest(unittest.TestCase):
     def test_the_entry_file_and_its_template_have_the_same_general_rules(self):
         """id: R-76"""
@@ -492,10 +584,53 @@ class GeneralRulesTest(unittest.TestCase):
 
     def test_the_entry_file_and_its_template_stay_within_their_word_limits(self):
         """id: R-76"""
-        limits = {"CLAUDE.md": 847, "skills/r-project-setup/templates/CLAUDE.md": 917}
+        limits = {"CLAUDE.md": 966, "skills/r-project-setup/templates/CLAUDE.md": 1036}
         for name, limit in limits.items():
             text = (ROOT / name).read_text(encoding="utf-8")
             self.assertLessEqual(len(text.split()), limit, name)
+
+    def test_the_entry_file_and_its_template_have_the_agents_section(self):
+        """id: R-109"""
+        for name in ENTRY_FILES:
+            text = (ROOT / name).read_text(encoding="utf-8")
+            self.assertEqual(text.count("\n## Agents\n"), 1, name)
+            self.assertLess(text.index("</general_rules>"), text.index("\n## Agents\n"))
+            self.assertLess(
+                text.index("\n## Agents\n"), text.index("\n## Communication contract\n")
+            )
+            section = text[text.index("\n## Agents\n") :]
+            section = section[: section.index("\n## Communication contract\n")]
+            for phrase in (
+                "Fable or Opus",
+                "Sonnet implements normal work.",
+                "Haiku implements mechanical work.",
+                "re-checks each claim of an agent",
+                "fails twice on one step",
+                "names no model and has no `model:` field",
+                "names a model alias",
+            ):
+                self.assertIn(phrase, section, name)
+
+    def test_no_skill_has_a_model_field(self):
+        """id: R-109"""
+        for path in sorted((ROOT / "skills").glob("r-*/SKILL.md")):
+            text = path.read_text(encoding="utf-8")
+            frontmatter = text[3 : text.index("\n---", 3)]
+            for line in frontmatter.splitlines():
+                self.assertFalse(line.startswith("model:"), str(path))
+
+    def test_the_entry_file_and_its_template_state_the_stage_addendum_once(self):
+        """id: R-112"""
+        sentence = (
+            "If `CLAUDE.md` lists a project skill `<project>-<stage>`, the stage "
+            "reads it after its own steps. The addendum holds only what is true "
+            "for that project."
+        )
+        for name in ENTRY_FILES:
+            text = (ROOT / name).read_text(encoding="utf-8")
+            self.assertEqual(text.count(sentence), 1, name)
+        for path in (ROOT / "skills").glob("r-*/SKILL.md"):
+            self.assertNotIn("<stage>", path.read_text(encoding="utf-8"), str(path))
 
     def test_the_entry_file_and_its_template_hold_the_group_questions(self):
         """id: R-51"""
@@ -935,7 +1070,7 @@ class ProjectReportTest(unittest.TestCase):
         contract = (ROOT / "skills" / "r-project-setup" / "contract.mk").read_text(
             encoding="utf-8"
         )
-        self.assertIn("r-project-report:", contract)
+        self.assertIn("\nproject-report:", contract)
 
     def test_this_repository_report_maps_the_requirements_list(self):
         """id: R-3"""
@@ -1557,11 +1692,227 @@ class MakeAndPodmanInterfaceTest(unittest.TestCase):
         self.assertIn("image-ci", node.split("\nBUILD_CMD = ")[1].split("\n\n")[0])
         self.assertRegex(node, r"(?m)^SMOKE_CMD = ")
 
+    def test_a_template_publishes_no_host_port_of_1024_or_lower(self):
+        """id: R-115"""
+        publish = re.compile(r"(?:-p|--publish)[ =](?:[0-9.]+:)?(\$\(\w+\)|\d+):")
+        found = 0
+        for path in self.makefiles():
+            text = path.read_text(encoding="utf-8")
+            for match in publish.finditer(text):
+                found += 1
+                host = match.group(1)
+                if host.startswith("$("):
+                    name = host[2:-1]
+                    default = re.search(rf"(?m)^{name} \??= (\d+)$", text)
+                    self.assertIsNotNone(default, f"{path.name} {name}")
+                    host = default.group(1)
+                self.assertGreater(int(host), 1024, f"{path.name}: {match.group(0)}")
+        self.assertGreaterEqual(found, 1)
+        node = (self.PIPELINE / "templates" / "Makefile.node").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("-p 127.0.0.1:$(HOST_PORT):$(PORT)", node)
+        self.assertIn('test "$(HOST_PORT)" -gt 1024', node)
+        skill = (self.PIPELINE / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn(
+            "- A container uses a standard port inside. A host binding of `make run`"
+            " uses a port above 1024, for example 8443, so no root privileges are"
+            " needed.",
+            skill,
+        )
+
+    def test_gradle_runs_in_podman_and_reaches_the_podman_socket(self):
+        """id: R-116"""
+        templates = {
+            "r-jvm": ROOT / "skills" / "r-jvm" / "templates" / "Makefile.gradle",
+            "r-github-pipeline": self.PIPELINE / "templates" / "Makefile.gradle",
+        }
+        jvm = (ROOT / "skills" / "r-jvm" / "jvm.mk").read_text(encoding="utf-8")
+        self.assertRegex(jvm, r"(?m)^PODMAN_SOCKET \?= ")
+        self.assertRegex(jvm, r"(?m)^podman-socket: ")
+        for owner, path in templates.items():
+            text = path.read_text(encoding="utf-8")
+            self.assertNotRegex(text, r"(?m)^PODMAN_SOCKET", owner)
+            podman = re.search(r"(?m)^GRADLE_PODMAN = (?:.*\\\n)*.*$", text)
+            self.assertIsNotNone(podman, owner)
+            for part in (
+                "--network host",
+                "-e CONTAINER_HOST=unix:///run/podman/podman.sock",
+                '-v "$(PODMAN_SOCKET)":/run/podman/podman.sock',
+                "./gradlew",
+            ):
+                self.assertIn(part, podman.group(0), f"{owner} {part}")
+            self.assertNotRegex(text, r"(?m)^podman-socket: ", owner)
+            self.assertNotIn("docker.sock", text, owner)
+            self.assertNotRegex(text, r"(?m)^[^#\n]*\bdocker run\b", owner)
+        skill = (ROOT / "skills" / "r-jvm" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn(
+            "- Gradle runs in a container and reaches Podman through"
+            " `$(GRADLE_PODMAN)`, so the host needs no Java toolchain.",
+            skill,
+        )
+
+    def test_a_client_package_has_one_generic_publish_workflow(self):
+        """id: R-117"""
+        text = (self.PIPELINE / "templates" / "publish-client.yml").read_text(
+            encoding="utf-8"
+        )
+        for part in (
+            "name: Publish client\n",
+            "  workflow_dispatch:\n",
+            '      - "client-v*"\n',
+            "  contents: write\n  packages: write\n",
+            "registry-url: https://npm.pkg.github.com",
+            'scope: "@${{ github.repository_owner }}"',
+            "npm ci",
+            "npm test",
+            "npm pack",
+            "gh release create",
+            "npm publish",
+            "Refusing to invent a version.",
+            'client-v${version}"',
+        ):
+            self.assertIn(part, text)
+        self.assertNotIn("@rbe", text)
+        self.assertNotIn("branches:", text)
+        self.assertNotIn("make ", text.split("jobs:")[1])
+        skill = (self.PIPELINE / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn(
+            "If the project has `client/package.json` and no"
+            " `.github/workflows/publish-client.yml`, copy"
+            " `templates/publish-client.yml` to that path.",
+            skill,
+        )
+        files = (self.PIPELINE / "references" / "setup-files.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("`templates/publish-client.yml`", files)
+        contract = (self.PIPELINE / "references" / "contract.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("`.github/workflows/publish-client.yml`", contract)
+
+    def test_a_binary_runs_once_in_the_build_and_an_image_runs_with_smoke_args(self):
+        """id: R-118"""
+        go = (ROOT / "skills" / "r-go" / "templates" / "Makefile.golang").read_text(
+            encoding="utf-8"
+        )
+        self.assertRegex(go, r"(?m)^BIN_SMOKE_ARGS \?= --help$")
+        smoke = re.search(r"(?m)^BIN_SMOKE = (.+)$", go).group(1)
+        self.assertIn("$(GO_RUN) build/$(BIN) $(BIN_SMOKE_ARGS)", smoke)
+        self.assertIn("$(if $(or $(GOOS),$(GOARCH)),,", smoke)
+        build = re.search(r"(?m)^BUILD_CMD = (.+)$", go).group(1)
+        self.assertIn("-o build/$(BIN) $(BIN_PKG) $(BIN_SMOKE),", build)
+        doc = (ROOT / "skills" / "r-go" / "references" / "build.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("runs `build/<name> $(BIN_SMOKE_ARGS)` in the Go image", doc)
+        container = (self.PIPELINE / "container.mk").read_text(encoding="utf-8")
+        self.assertIn('podman run --rm "$(CI_IMAGE)" $(SMOKE_ARGS)', container)
+        image = (self.PIPELINE / "templates" / "Makefile.image").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("# SMOKE_ARGS = --help", image)
+
+    def test_the_web_smoke_check_looks_for_the_page_root_and_the_api_needle(self):
+        """id: R-119"""
+        node = (self.PIPELINE / "templates" / "Makefile.node").read_text(
+            encoding="utf-8"
+        )
+        self.assertRegex(node, r'(?m)^SMOKE_PAGE_NEEDLE \?= id="root"$')
+        self.assertRegex(node, r"(?m)^SMOKE_NEEDLE \?= ok$")
+        smoke = node.split("\nSMOKE_CMD = ")[1].split("\n\n")[0]
+        self.assertIn('"https://127.0.0.1:$(PORT)$(SMOKE_PATH)"', smoke)
+        self.assertIn("grep -qF '$(SMOKE_NEEDLE)'", smoke)
+        self.assertIn('"https://127.0.0.1:$(PORT)/"', smoke)
+        self.assertIn("grep -qF '$(SMOKE_PAGE_NEEDLE)'", smoke)
+        self.assertIn("[ -n '$(SMOKE_PAGE_NEEDLE)' ]", smoke)
+        self.assertLess(
+            smoke.index("SMOKE_PAGE_NEEDLE"), smoke.index('test "$$ok" = 1')
+        )
+        doc = (self.PIPELINE / "references" / "makefile.md").read_text(encoding="utf-8")
+        self.assertIn("`SMOKE_PAGE_NEEDLE`", doc)
+
+    def test_the_list_of_the_entry_file_row_is_the_one_list_of_the_skills(self):
+        """id: R-16 R-60"""
+        setup = (ROOT / "docs" / "requirements" / "project-setup.md").read_text(
+            encoding="utf-8"
+        )
+        row = [line for line in setup.splitlines() if '<a id="r-60">' in line][0]
+        sentence = row.split("The skills of the collection are ")[1].split(
+            ". This list is the one list"
+        )[0]
+        listed = re.findall(r"`(r-[a-z-]+)`", sentence)
+        self.assertEqual(len(listed), len(set(listed)))
+        folders = sorted(path.name for path in (ROOT / "skills").glob("r-*"))
+        self.assertEqual(sorted(listed), folders)
+        collection = (ROOT / "docs" / "requirements" / "collection.md").read_text(
+            encoding="utf-8"
+        )
+        row16 = [line for line in collection.splitlines() if '<a id="r-16">' in line][0]
+        self.assertIn("[R-60](project-setup.md#r-60)", row16)
+        self.assertEqual(re.findall(r"`(r-[a-z-]+)`", row16), [])
+
+    def test_a_publish_job_runs_on_a_push_only_with_the_flag_and_always_on_dispatch(
+        self,
+    ):
+        """id: R-121"""
+        flag = (
+            "(github.event_name == 'push' && github.ref =="
+            " format('refs/heads/{0}', github.event.repository.default_branch)"
+            " && vars.AUTO_PUBLISH == 'true') ||"
+        )
+        counts = {"ci.node.yml": 1, "ci.make.yml": 1, "ci.gradle.yml": 2}
+        for name, count in counts.items():
+            workflow = (self.PIPELINE / "templates" / name).read_text(encoding="utf-8")
+            jobs = re.findall(
+                r"(?ms)^  (publish-[a-z]+):\n(.*?)(?=^  [a-z-]+:\n)",
+                workflow + "  x:\n",
+            )
+            self.assertEqual(len(jobs), count, name)
+            for job, body in jobs:
+                condition = body.split("    if: >-\n")[1].split("    runs-on:")[0]
+                lines = [line.strip() for line in condition.splitlines()]
+                self.assertEqual(
+                    lines, [flag, f"inputs.job == '{job}'"], f"{name} {job}"
+                )
+                self.assertIn("needs: [build, test]", body)
+        client = (self.PIPELINE / "templates" / "publish-client.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("branches:", client)
+        self.assertNotIn("AUTO_PUBLISH", client)
+        sdlc = PIPELINE_MK.read_text(encoding="utf-8")
+        container = (self.PIPELINE / "container.mk").read_text(encoding="utf-8")
+        self.assertNotIn("AUTO_PUBLISH", sdlc + container)
+        ci = re.search(r"(?m)^SDLC_CI \?= (.+)$", sdlc).group(1)
+        self.assertNotIn("publish", ci)
+        for name in ("Makefile.node", "Makefile.gradle", "Makefile.image"):
+            text = (self.PIPELINE / "templates" / name).read_text(encoding="utf-8")
+            for line in re.findall(r"(?m)^SDLC_CI \??= (.+)$", text):
+                self.assertNotIn("publish", line, name)
+        skill = (self.PIPELINE / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn(
+            "- By default only a human publishes a large artifact, such as a"
+            " container image, to a registry, with `workflow_dispatch`.",
+            skill,
+        )
+        self.assertIn("`AUTO_PUBLISH` set to `true`", skill)
+        for path in (
+            self.PIPELINE / "references" / "workflow.md",
+            self.PIPELINE / "references" / "contract.md",
+            self.PIPELINE / "templates" / "pipeline-rules.md",
+            ROOT / "skills" / "r-release" / "SKILL.md",
+        ):
+            self.assertIn("AUTO_PUBLISH", path.read_text(encoding="utf-8"), path.name)
+        setup = ROOT / "skills" / "r-project-setup" / "templates" / "CLAUDE.md"
+        self.assertNotIn(
+            "with the merge into the default branch", setup.read_text(encoding="utf-8")
+        )
+
     def test_jvm_tooling_counts_a_kotlin_build_file_as_present(self):
         """id: R-66"""
-        gradle = (
-            ROOT / "skills" / "r-jvm" / "templates" / "Makefile.gradle"
-        ).read_text(encoding="utf-8")
+        gradle = (ROOT / "skills" / "r-jvm" / "jvm.mk").read_text(encoding="utf-8")
         recipe = gradle.split("\njvm-tooling: ## ")[1].split("\n\n")[0]
         self.assertIn(
             "if [ ! -f build.gradle ] && [ ! -f build.gradle.kts ]; then cp", recipe
@@ -1706,6 +2057,93 @@ def expand_make_recipe(target, variables):
         return variables[match.group(1)]
 
     return re.sub(r"\$\$|\$\((\w+)\)", replace, shell)
+
+
+FAKE_GIT = """\
+case "$*" in
+    "tag -l v[0-9]*") cat tags.txt ;;
+    "rev-parse --abbrev-ref HEAD") cat branch.txt ;;
+    "rev-parse HEAD") cat head.txt ;;
+    "rev-parse -q --verify origin/main") cat tip.txt 2>/dev/null || exit 1 ;;
+    *) exit 1 ;;
+esac
+"""
+
+
+class CheckTagRecipeTest(unittest.TestCase):
+    """Runs the real check-tag recipe of sdlc.mk in sh against a fake git."""
+
+    def check(self, tag, tags=("v0.3.0", "v0.4.0"), branch="main", head="a1", tip="a1"):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "bin").mkdir()
+            (root / "bin" / "git").write_text(FAKE_GIT, encoding="utf-8")
+            (root / "bin" / "git").chmod(0o755)
+            (root / "tags.txt").write_text("".join(f"{t}\n" for t in tags))
+            (root / "branch.txt").write_text(branch + "\n")
+            (root / "head.txt").write_text(head + "\n")
+            if tip:
+                (root / "tip.txt").write_text(tip + "\n")
+            shell = expand_make_recipe("check-tag", {"DEFAULT_BRANCH": "main"})
+            environment = {"PATH": f"{root / 'bin'}:{os.environ['PATH']}"}
+            if tag is not None:
+                environment["TAG"] = tag
+            return subprocess.run(
+                ["sh", "-c", shell],
+                cwd=tmp,
+                env=environment,
+                capture_output=True,
+                text=True,
+            )
+
+    def test_a_new_newer_tag_at_the_tip_of_the_default_branch_passes(self):
+        """id: R-120"""
+        for tag in ("v0.5.0", "v0.4.1", "v1.0.0", "v0.10.0"):
+            result = self.check(tag)
+            self.assertEqual(result.returncode, 0, f"{tag} {result.stderr}")
+        result = self.check("v0.1.0", tags=())
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_a_bad_old_or_existing_tag_fails_and_names_the_reason(self):
+        """id: R-120"""
+        cases = (
+            (None, "set TAG"),
+            ("0.5.0", "is not vMAJOR.MINOR.PATCH"),
+            ("v0.5", "is not vMAJOR.MINOR.PATCH"),
+            ("v0.5.0-rc1", "is not vMAJOR.MINOR.PATCH"),
+            ("v0.4.0", "exists"),
+            ("v0.3.5", "is not newer than v0.4.0"),
+        )
+        for tag, reason in cases:
+            result = self.check(tag)
+            self.assertNotEqual(result.returncode, 0, f"{tag}")
+            self.assertIn(reason, result.stderr, f"{tag}")
+        # a pre-release tag does not count as the nearest tag
+        result = self.check("v0.3.5", tags=("v0.3.0", "v0.4.0-rc1"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_a_tag_off_the_tip_of_the_default_branch_fails(self):
+        """id: R-120"""
+        for kwargs in (
+            {"branch": "feature"},
+            {"head": "b2"},
+            {"tip": ""},
+        ):
+            result = self.check("v0.5.0", **kwargs)
+            self.assertNotEqual(result.returncode, 0, str(kwargs))
+            self.assertIn("check out the tip of main", result.stderr)
+
+    def test_the_skill_and_the_reference_name_the_target(self):
+        """id: R-120"""
+        skill = (ROOT / "skills" / "r-github-pipeline" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "- Before a `v*` tag is pushed, `make check-tag TAG=vX.Y.Z` must pass:",
+            skill,
+        )
+        sdlc = PIPELINE_MK.read_text(encoding="utf-8")
+        self.assertIn(".PHONY: help version check-tag ci", sdlc)
 
 
 class CleanupRecipeTest(unittest.TestCase):
@@ -1872,6 +2310,484 @@ class CleanupRecipeTest(unittest.TestCase):
             recipe = text.split("\n" + target + ": ## ")[1].split("\n\n")[0]
             self.assertIn("$(SDLC_TAG)", recipe)
             self.assertNotIn("-s --no-print-directory version", recipe)
+
+
+HELP_MK = ROOT / "skills" / "r-project-setup" / "help.mk"
+HELP_ORDER = ["Gates", "Project", "Board", "Delivery", "Tools"]
+HELP_GROUP_OF = {
+    "setup": "Gates",
+    "build": "Gates",
+    "test": "Gates",
+    "editorconfig": "Gates",
+    "format": "Gates",
+    "format-fix": "Gates",
+    "lint": "Gates",
+    "integration": "Gates",
+    "coverage": "Gates",
+    "docs": "Gates",
+    "test-changed": "Gates",
+    "check-docs": "Gates",
+    "ci": "Gates",
+    "project-report": "Board",
+    "old-board": "Board",
+    "old-board-delete": "Board",
+    "board-numbers": "Board",
+    "toon": "Board",
+    "ids": "Board",
+    "id": "Board",
+    "id-raise": "Board",
+    "req": "Board",
+    "links": "Board",
+    "links-check": "Board",
+    "version": "Delivery",
+    "check-tag": "Delivery",
+    "publish-tags": "Delivery",
+    "report": "Delivery",
+    "login": "Delivery",
+    "image": "Delivery",
+    "image-ci": "Delivery",
+    "publish-container": "Delivery",
+    "publish-github": "Delivery",
+    "ci-status": "Delivery",
+    "pull-request": "Delivery",
+    "pull-request-merge": "Delivery",
+    "cleanup-container-versions": "Delivery",
+    "cleanup-github-releases": "Delivery",
+    "cleanup-actions-artifacts": "Delivery",
+    "help": "Tools",
+    "py": "Tools",
+    "doctor": "Tools",
+    "podman-start": "Tools",
+    "skills-install": "Tools",
+    "skills-update": "Tools",
+    "apm": "Tools",
+    "gh-image": "Tools",
+    "npm": "Tools",
+    "node-tooling": "Tools",
+    "python-tooling": "Tools",
+    "go": "Tools",
+    "go-tooling": "Tools",
+    "wrapper": "Tools",
+    "jvm-tooling": "Tools",
+    "podman-socket": "Tools",
+}
+TARGET_WITH_HELP = re.compile(r"^([a-zA-Z][a-zA-Z0-9_-]*):.*## ")
+
+
+def included_makefiles(path, found=None):
+    """`path` and the makefiles that it includes, in the order Make reads them."""
+    found = [] if found is None else found
+    if path in found:
+        return found
+    found.append(path)
+    for line in path.read_text(encoding="utf-8").splitlines():
+        match = re.match(r"-?include (\S+)$", line)
+        if not match:
+            continue
+        name = re.sub(r"\$\(\w+_DIR\)", str(path.parent) + "/", match.group(1))
+        if name.startswith(".claude/skills/"):
+            name = str(ROOT / "skills" / name[len(".claude/skills/") :])
+        if "$(" not in name and Path(name).exists():
+            included_makefiles(Path(name).resolve(), found)
+    return found
+
+
+def help_output(makefiles, docs="", login="", groups=None):
+    """The group headings and the targets under them that `make help` prints.
+
+    Make is not in the test image. This takes HELP_LIST from help.mk, expands
+    it as Make does, and runs the awk command on the makefiles.
+    """
+    text = HELP_MK.read_text(encoding="utf-8")
+    body = text.split("\nHELP_LIST ?= ")[1].split("\n\n")[0]
+    body = re.sub(r"\\\n\s*", " ", body).replace("\\#", "#")
+    values = {
+        "RENDER_DOCS": docs,
+        "PUBLISH_IMAGE": login,
+        "HELP_GROUPS": groups
+        or re.search(r"(?m)^HELP_GROUPS \?= (.+)$", text).group(1),
+        "MAKEFILE_LIST": " ".join(str(path) for path in makefiles),
+    }
+    command = re.sub(
+        r"\$\$|\$\((\w+)\)",
+        lambda match: "$" if match.group(1) is None else values[match.group(1)],
+        body,
+    )
+    result = subprocess.run(["sh", "-c", command], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    order = []
+    rows = {}
+    for line in result.stdout.splitlines():
+        if line.startswith("  "):
+            rows[order[-1]].append(line.split()[0])
+        elif line.endswith(":"):
+            order.append(line[:-1])
+            rows[order[-1]] = []
+        else:
+            assert line == "", f"unexpected help line: {line!r}"
+    return order, rows, result.stdout
+
+
+def targets_with_group(path):
+    """Each target with a help text in a makefile, and the group marker above it."""
+    group = None
+    found = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("# help-group: "):
+            group = line[len("# help-group: ") :].strip()
+            continue
+        match = TARGET_WITH_HELP.match(line)
+        if match:
+            found.append((match.group(1), group))
+    return found
+
+
+class HelpGroupsTest(unittest.TestCase):
+    """The groups of `make help`, from help.mk and the markers of the makefiles."""
+
+    SETUP = ROOT / "skills" / "r-project-setup"
+    PIPELINE = ROOT / "skills" / "r-github-pipeline"
+
+    def product(self, tmp, contract):
+        makefile = write(
+            Path(tmp),
+            "Makefile",
+            f"include {contract}\n\ndeploy: ## Deploy the app\n",
+        )
+        return [makefile] + included_makefiles(contract)
+
+    def test_help_prints_the_groups_in_a_fixed_order_with_each_target_in_its_group(
+        self,
+    ):
+        """id: R-11"""
+        with tempfile.TemporaryDirectory() as tmp:
+            files = self.product(tmp, self.PIPELINE / "sdlc.mk")
+            order, rows, _output = help_output(files)
+        self.assertEqual(order, HELP_ORDER)
+        self.assertEqual(rows["Project"], ["deploy"])
+        for group, expected in (
+            (
+                "Gates",
+                "setup build test editorconfig format format-fix lint integration"
+                " coverage test-changed check-docs ci",
+            ),
+            ("Board", "project-report old-board toon ids id req links"),
+            (
+                "Delivery",
+                "version check-tag publish-tags report image image-ci"
+                " publish-container ci-status pull-request pull-request-merge"
+                " cleanup-container-versions cleanup-github-releases"
+                " cleanup-actions-artifacts",
+            ),
+            (
+                "Tools",
+                "help py doctor podman-start skills-install skills-update apm gh-image",
+            ),
+        ):
+            self.assertEqual(
+                sorted(set(expected.split()) - set(rows[group])), [], group
+            )
+        listed = [name for group in order for name in rows[group]]
+        self.assertEqual(len(listed), len(set(listed)))
+
+    def test_help_on_project_mk_has_no_delivery_group_until_an_image_is_published(
+        self,
+    ):
+        """id: R-11"""
+        with tempfile.TemporaryDirectory() as tmp:
+            files = self.product(tmp, self.SETUP / "project.mk")
+            order, rows, _output = help_output(files)
+            self.assertEqual(order, ["Gates", "Project", "Board", "Tools"])
+            order, rows, _output = help_output(files, login="1")
+            self.assertEqual(order, HELP_ORDER)
+            self.assertEqual(rows["Delivery"], ["login"])
+
+    def test_help_hides_docs_and_login_until_the_project_asks_for_them(self):
+        """id: R-11"""
+        with tempfile.TemporaryDirectory() as tmp:
+            files = self.product(tmp, self.PIPELINE / "sdlc.mk")
+            _order, rows, _output = help_output(files)
+            listed = [name for names in rows.values() for name in names]
+            self.assertNotIn("docs", listed)
+            self.assertNotIn("login", listed)
+            self.assertIn("setup", listed)
+            _order, rows, _output = help_output(files, docs="1", login="1")
+            self.assertIn("docs", rows["Gates"])
+            self.assertIn("login", rows["Delivery"])
+            _order, rows, _output = help_output(files, docs="1")
+            self.assertIn("docs", rows["Gates"])
+            self.assertNotIn("login", rows["Delivery"])
+
+    def test_a_group_outside_the_order_prints_after_the_named_groups(self):
+        """id: R-11"""
+        with tempfile.TemporaryDirectory() as tmp:
+            first = write(
+                Path(tmp),
+                "first.mk",
+                "p: ## In project\n"
+                "# help-group: Zeta\nz: ## In zeta\n"
+                "# help-group: Gates\ng: ## Gate\n"
+                "# help-group: Alpha\na: ## In alpha\n",
+            )
+            second = write(
+                Path(tmp),
+                "second.mk",
+                "# help-group: Tools\ng: ## Second\nt: ## In tools\n",
+            )
+            order, rows, output = help_output(
+                [first, second], groups="Gates Missing Tools"
+            )
+        self.assertEqual(order, ["Gates", "Tools", "Project", "Zeta", "Alpha"])
+        self.assertEqual(rows["Gates"], ["g"])
+        self.assertEqual(rows["Tools"], ["t"])
+        self.assertIn("Gate", output)
+        self.assertNotIn("Second", output)
+        self.assertNotIn("Missing", output)
+
+    def test_a_marker_applies_to_its_own_file_and_each_file_starts_in_project(self):
+        """id: R-11"""
+        with tempfile.TemporaryDirectory() as tmp:
+            first = write(Path(tmp), "first.mk", "# help-group: Tools\na: ## One\n")
+            second = write(Path(tmp), "second.mk", "b: ## Two\n")
+            order, rows, _output = help_output([first, second])
+        self.assertEqual(order, ["Project", "Tools"])
+        self.assertEqual(rows, {"Project": ["b"], "Tools": ["a"]})
+
+    def test_a_group_marker_works_inside_a_hidden_block_and_endif_ends_the_hiding(
+        self,
+    ):
+        """id: R-11"""
+        with tempfile.TemporaryDirectory() as tmp:
+            file = write(
+                Path(tmp),
+                "hidden.mk",
+                "ifeq ($(RENDER_DOCS),1)\n# help-docs\n# help-group: Gates\n"
+                "docs: ## Render\nendif\nafter: ## Shown\n",
+            )
+            order, rows, _output = help_output([file])
+            self.assertEqual(rows, {"Gates": ["after"]})
+            order, rows, _output = help_output([file], docs="1")
+            self.assertEqual(rows, {"Gates": ["docs", "after"]})
+
+    def test_project_mk_and_sdlc_mk_run_the_one_list_from_help_mk(self):
+        """id: R-11"""
+        project = (self.SETUP / "project.mk").read_text(encoding="utf-8")
+        sdlc = (self.PIPELINE / "sdlc.mk").read_text(encoding="utf-8")
+        self.assertIn("\ninclude $(PROJECT_MK_DIR)help.mk\n", project)
+        self.assertIn("\ninclude $(SDLC_MK_DIR)../r-project-setup/help.mk\n", sdlc)
+        for name, text in (("project.mk", project), ("sdlc.mk", sdlc)):
+            recipe = text.split("\nhelp: ## ")[1].split("\n\n")[0]
+            self.assertIn("\t@$(HELP_LIST)", recipe, name)
+            self.assertNotIn("awk", recipe, name)
+            self.assertIn("@printf '%s\\n' \"$(HELP_LEAD)\"", recipe, name)
+        self.assertIn(
+            "make ci runs $(SDLC_CI). It does not publish.",
+            sdlc.split("\nhelp: ## ")[1].split("\n\n")[0],
+        )
+        help_mk = HELP_MK.read_text(encoding="utf-8")
+        self.assertIn("\nifndef HELP_MK\nHELP_MK := 1\n", help_mk)
+        self.assertIn("\nHELP_GROUPS ?= Gates Project Board Delivery Tools\n", help_mk)
+        self.assertTrue(help_mk.endswith(".DEFAULT_GOAL := help\n\nendif\n"))
+
+    def test_the_help_command_uses_posix_awk_only(self):
+        """id: R-11"""
+        help_mk = HELP_MK.read_text(encoding="utf-8")
+        body = help_mk.split("\nHELP_LIST ?= ")[1].split("\n\n")[0]
+        self.assertTrue(body.startswith("awk "))
+        self.assertNotRegex(
+            body,
+            r"\b(asort|asorti|gensub|strftime|systime|PROCINFO|BEGINFILE|ENDFILE"
+            r"|IGNORECASE|FPAT|patsplit|switch|length\()",
+        )
+        self.assertNotIn("'", body.split("'", 1)[1].rsplit("'", 1)[0])
+
+    def test_every_target_with_a_help_text_sits_under_the_group_marker_of_its_group(
+        self,
+    ):
+        """id: R-11"""
+        files = [
+            path
+            for path in sorted((ROOT / "skills").glob("*/*.mk"))
+            if path.name != "help.mk"
+        ]
+        self.assertGreater(len(files), 15)
+        found = 0
+        for path in files:
+            for target, group in targets_with_group(path):
+                found += 1
+                self.assertIsNotNone(group, f"{path.name}: {target} has no marker")
+                self.assertIn(group, HELP_ORDER, f"{path.name}: {target}")
+                expected = HELP_GROUP_OF.get(target)
+                self.assertEqual(group, expected, f"{path.name}: {target}")
+        self.assertGreater(found, 45)
+
+
+LANGUAGE_FILES = {
+    "r-node/node.mk": {
+        "targets": ["npm", "node-tooling"],
+        "variables": ["NODE", "NODE_IMAGE", "NODE_VERSION", "NODE_DEV_TOOLS"],
+    },
+    "r-python/python.mk": {"targets": ["python-tooling"], "variables": []},
+    "r-go/go.mk": {
+        "targets": ["go", "go-tooling"],
+        "variables": ["GO_IMAGE", "GO_CACHE", "GO_OPTS", "GO_RUN", "GO", "MODULE"],
+    },
+    "r-jvm/jvm.mk": {
+        "targets": ["wrapper", "jvm-tooling", "podman-socket"],
+        "variables": [
+            "JDK_IMAGE",
+            "GRADLE_VERSION",
+            "GRADLE_IMAGE",
+            "GRADLE_RUN",
+            "PODMAN_SOCKET",
+        ],
+    },
+}
+LANGUAGE_TEMPLATES = (
+    ("r-node/templates/Makefile.node", "r-node/node.mk", "r-project-setup/project.mk"),
+    (
+        "r-python/templates/Makefile.python",
+        "r-python/python.mk",
+        "r-project-setup/project.mk",
+    ),
+    ("r-go/templates/Makefile.golang", "r-go/go.mk", "r-project-setup/project.mk"),
+    ("r-jvm/templates/Makefile.gradle", "r-jvm/jvm.mk", "r-project-setup/project.mk"),
+    (
+        "r-github-pipeline/templates/Makefile.node",
+        "r-node/node.mk",
+        "r-github-pipeline/sdlc.mk",
+    ),
+    (
+        "r-github-pipeline/templates/Makefile.gradle",
+        "r-jvm/jvm.mk",
+        "r-github-pipeline/sdlc.mk",
+    ),
+)
+
+
+class LanguageIncludeFileTest(unittest.TestCase):
+    """The include file of each language skill holds the targets of its language."""
+
+    def read(self, relative):
+        return (ROOT / "skills" / relative).read_text(encoding="utf-8")
+
+    def test_a_language_template_includes_its_file_and_defines_none_of_its_targets(
+        self,
+    ):
+        """id: R-122"""
+        for template, language, contract in LANGUAGE_TEMPLATES:
+            text = self.read(template)
+            spec = LANGUAGE_FILES[language]
+            include = f"\ninclude .claude/skills/{language}\n"
+            self.assertEqual(text.count(include), 1, template)
+            self.assertGreater(
+                text.index(include),
+                text.index(f"\ninclude .claude/skills/{contract}\n"),
+                template,
+            )
+            for target in spec["targets"]:
+                self.assertNotRegex(text, rf"(?m)^{target}:", f"{template} {target}")
+                self.assertNotRegex(
+                    text, rf"(?m)^\.PHONY: {target}$", f"{template} {target}"
+                )
+            self.assertNotRegex(text, r"(?m)^PODMAN_SOCKET", template)
+            if "github-pipeline" not in template:
+                for variable in spec["variables"]:
+                    self.assertNotRegex(
+                        text, rf"(?m)^{variable} \??= ", f"{template} {variable}"
+                    )
+
+    def test_the_go_template_keeps_the_run_target_of_the_project(self):
+        """id: R-122"""
+        text = self.read("r-go/templates/Makefile.golang")
+        self.assertRegex(text, r"(?m)^run: ## ")
+        self.assertRegex(text, r"(?m)^ARGS \?=$")
+
+    def test_the_pipeline_node_template_gives_node_mk_the_image_it_needs(self):
+        """id: R-122"""
+        template = self.read("r-github-pipeline/templates/Makefile.node")
+        node = self.read("r-node/node.mk")
+        self.assertRegex(node, r"(?m)^NODE \?= podman run .*\\$")
+        self.assertIn("$(NODE_IMAGE)", node.split("\nNODE ?= ")[1].split("\n\n")[0])
+        self.assertLess(
+            template.index("\nNODE_IMAGE ?= "),
+            template.index("\ninclude .claude/skills/r-node/node.mk\n"),
+        )
+
+    def test_a_language_file_defines_its_targets_and_its_defaults_with_the_marker(
+        self,
+    ):
+        """id: R-122"""
+        for language, spec in LANGUAGE_FILES.items():
+            text = self.read(language)
+            guard = re.search(r"(?m)^ifndef (\w+_MK)\n\1 := 1$", text)
+            self.assertIsNotNone(guard, language)
+            phony = " ".join(re.findall(r"(?m)^\.PHONY:(.*)$", text)).split()
+            found = targets_with_group(ROOT / "skills" / language)
+            self.assertEqual([name for name, _ in found], spec["targets"], language)
+            for target, group in found:
+                self.assertEqual(group, "Tools", f"{language} {target}")
+                self.assertIn(target, phony, f"{language} {target}")
+            for variable in spec["variables"]:
+                self.assertRegex(
+                    text, rf"(?m)^{variable} \?= ", f"{language} {variable}"
+                )
+                self.assertNotRegex(
+                    text, rf"(?m)^{variable} = ", f"{language} {variable}"
+                )
+            self.assertTrue(text.endswith(".DEFAULT_GOAL := help\n\nendif\n"), language)
+
+    def test_the_gradle_defaults_match_the_template_values_they_replaced(self):
+        """id: R-122"""
+        jvm = self.read("r-jvm/jvm.mk")
+        for line in (
+            "JDK_IMAGE ?= docker.io/library/eclipse-temurin:25-jdk",
+            "GRADLE_VERSION ?= 9.1.0",
+            "GRADLE_IMAGE ?= docker.io/library/gradle:$(GRADLE_VERSION)-jdk25",
+            "PODMAN_SOCKET ?= $$(podman info --format '{{.Host.RemoteSocket.Path}}')",
+        ):
+            self.assertIn("\n" + line + "\n", jvm)
+        node = self.read("r-node/node.mk")
+        self.assertIn("\nNODE_VERSION ?= 24\n", node)
+        self.assertIn(
+            "\nNODE_IMAGE ?= docker.io/library/node:$(NODE_VERSION)-bookworm-slim\n",
+            node,
+        )
+        go = self.read("r-go/go.mk")
+        self.assertIn("\nGO_IMAGE ?= docker.io/library/golang:1.25-bookworm\n", go)
+        self.assertIn("\nGO ?= $(GO_RUN) go\n", go)
+
+    def test_podman_socket_checks_the_socket_in_the_mount_namespace_of_rootless_podman(
+        self,
+    ):
+        """id: R-122"""
+        jvm = self.read("r-jvm/jvm.mk")
+        recipe = jvm.split("\npodman-socket: ## ")[1].split("\n\n")[0]
+        for part in (
+            "{{.Host.ServiceIsRemote}}",
+            "systemctl --user start podman.socket",
+            "podman system service --time=0",
+            'podman unshare test -S "$$sock"',
+            "podman system migrate",
+        ):
+            self.assertIn(part, recipe)
+        self.assertEqual(recipe.count('podman unshare test -S "$$sock"'), 2)
+        self.assertEqual(recipe.count("podman system migrate"), 2)
+
+    def test_the_root_makefile_of_the_collection_includes_no_language_file(self):
+        """id: R-122"""
+        text = (ROOT / "Makefile").read_text(encoding="utf-8")
+        for language in LANGUAGE_FILES:
+            self.assertNotIn(language, text)
+
+    def test_a_language_skill_names_its_include_file(self):
+        """id: R-122"""
+        for language in LANGUAGE_FILES:
+            skill, name = language.split("/")
+            text = self.read(f"{skill}/SKILL.md")
+            self.assertIn(f"`{name}`", text, skill)
+            tooling = self.read(f"{skill}/references/tooling.md")
+            self.assertIn(f"include .claude/skills/{language}", tooling, skill)
 
 
 if __name__ == "__main__":

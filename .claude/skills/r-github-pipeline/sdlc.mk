@@ -72,12 +72,14 @@ ifndef SDLC_MK
 SDLC_MK := 1
 
 SDLC_MK_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
+include $(SDLC_MK_DIR)../r-project-setup/help.mk
 include $(SDLC_MK_DIR)../r-project-setup/podman-python.mk
 include $(SDLC_MK_DIR)../r-project-setup/tools.mk
 include $(SDLC_MK_DIR)../r-project-setup/doctor.mk
 include $(SDLC_MK_DIR)../r-project-setup/skills.mk
 include $(SDLC_MK_DIR)../r-project-setup/old-board.mk
 include $(SDLC_MK_DIR)../r-project-setup/test-changed.mk
+include $(SDLC_MK_DIR)../r-project-setup/check-docs.mk
 -include .claude/skills/r-project-report/report.mk
 include $(SDLC_MK_DIR)../r-project-setup/contract.mk
 include $(SDLC_MK_DIR)container.mk
@@ -118,7 +120,7 @@ THIS_MAKE := $(MAKE)
 
 # setup, build, test, and the publish targets are phony here so a build/
 # directory cannot satisfy the build target.
-.PHONY: help version ci report setup build test docs publish-tags \
+.PHONY: help version check-tag ci report setup build test docs publish-tags \
 	publish-container publish-github image run stop clean gh-image \
 	ci-status pull-request pull-request-merge \
 	cleanup-container-versions cleanup-github-releases cleanup-actions-artifacts
@@ -178,6 +180,7 @@ if [ "$$branch" = HEAD ] || [ "$$branch" = "$(DEFAULT_BRANCH)" ]; then \
 fi
 endef
 
+# help-group: Delivery
 publish-tags: ## Print tags to push. latest only on the default branch
 	@set -eu; \
 	tag=$$($(THIS_MAKE) -s --no-print-directory version); \
@@ -185,12 +188,12 @@ publish-tags: ## Print tags to push. latest only on the default branch
 	$(SDLC_ON_DEFAULT); \
 	if [ "$$on_default" -eq 1 ]; then printf '%s\n' latest; fi
 
+# help-group: Tools
 help: ## Show the targets. A "Match CI" line is a target the workflow runs
 	@printf '%s\n' "$(HELP_LEAD)"
 	@printf '%s\n' "make ci runs $(SDLC_CI). It does not publish."
 	@printf '%s\n' "Podman is the only container engine."
-	@printf '%s\n' ""
-	@awk -v docs="$(RENDER_DOCS)" -v login="$(PUBLISH_IMAGE)" 'BEGIN {FS = ":.*## "}; /^# help-docs$$/ { skip = (docs != "1"); next } /^# help-login$$/ { skip = (login != "1"); next } /^endif$$/ { skip = 0; next } skip { next } /^[a-zA-Z][a-zA-Z0-9_-]*:.*## / && !seen[$$1]++ {printf "  %-32s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@$(HELP_LIST)
 
 gh-image: ## Build the image of the GitHub CLI, once
 	@set -eu; \
@@ -202,6 +205,7 @@ gh-image: ## Build the image of the GitHub CLI, once
 	  'ENTRYPOINT ["gh"]' \
 	| podman build $(PODMAN_NET_ARGS) --build-arg GH_VERSION="$(GH_VERSION)" -t "$(GH_IMAGE)" -f - . >&2
 
+# help-group: Delivery
 ci-status: ## Print the CI result of HEAD (SHA=<sha>). WAIT=1 waits for the end. Fails unless the run passed
 	@set -eu; \
 	$(SDLC_GH_REPO); \
@@ -275,6 +279,24 @@ version: ## Print MAJOR.MINOR.PATCH-run. PRINT=tag prints the vX.Y.Z tag
 	  || { echo "GITHUB_RUN_NUMBER must be a positive integer. Refusing to invent a build number." >&2; exit 1; }; \
 	printf '%s-%s\n' "$${tag#v}" "$(GITHUB_RUN_NUMBER)"
 
+check-tag: ## Fail when TAG is not a new vMAJOR.MINOR.PATCH at the tip of the default branch. Run it before the tag is pushed
+	@set -eu; \
+	tag="$${TAG:-}"; \
+	if [ -z "$$tag" ]; then echo "check-tag: set TAG=vMAJOR.MINOR.PATCH." >&2; exit 1; fi; \
+	printf '%s\n' "$$tag" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$$' \
+	  || { echo "check-tag: '$$tag' is not vMAJOR.MINOR.PATCH." >&2; exit 1; }; \
+	strict=$$(git tag -l 'v[0-9]*' | grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$$' || true); \
+	if printf '%s\n' "$$strict" | grep -qx "$$tag"; then echo "check-tag: the tag $$tag exists." >&2; exit 1; fi; \
+	newest=$$(printf '%s\n%s\n' "$$strict" "$$tag" | grep . | sed 's/^v//' | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1); \
+	if [ "v$$newest" != "$$tag" ]; then echo "check-tag: $$tag is not newer than v$$newest." >&2; exit 1; fi; \
+	branch=$$(git rev-parse --abbrev-ref HEAD); \
+	tip=$$(git rev-parse -q --verify "origin/$(DEFAULT_BRANCH)" || git rev-parse -q --verify "$(DEFAULT_BRANCH)" || true); \
+	if [ "$$branch" != "$(DEFAULT_BRANCH)" ] || [ -z "$$tip" ] || [ "$$(git rev-parse HEAD)" != "$$tip" ]; then \
+	  echo "check-tag: check out the tip of $(DEFAULT_BRANCH) before the tag. HEAD is on '$$branch'." >&2; exit 1; \
+	fi; \
+	printf '%s\n' "check-tag: $$tag is a new tag at the tip of $(DEFAULT_BRANCH)."
+
+# help-group: Gates
 ci: ## Run the local CI targets, in order. Does not publish
 	@set -eu; for t in $(SDLC_CI); do \
 	  $(MAKE) --no-print-directory "$$t"; \
@@ -282,6 +304,7 @@ ci: ## Run the local CI targets, in order. Does not publish
 	  eval "JOB_RESULT_$$key=success; export JOB_RESULT_$$key"; \
 	done
 
+# help-group: Delivery
 report: ## Match CI: write build/report/index.md from logs, summaries, and job results
 	@set -eu; \
 	mkdir -p build/logs build/summaries build/report; \

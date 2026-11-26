@@ -16,11 +16,12 @@ CONTRACT_MK := 1
 
 REGISTRY ?= ghcr.io
 
-.PHONY: setup build test r-project-report editorconfig format format-fix lint integration coverage
+.PHONY: setup build test project-report editorconfig format format-fix lint integration coverage
 
 # The project stub. doctor.mk makes doctor the first prerequisite of
 # setup. setup installs no tool on the host: every tool is a Podman
 # image behind a target.
+# help-group: Gates
 setup: ## Resolve dependencies
 ifeq ($(strip $(SETUP_CMD)),)
 	@printf '%s\n' "setup: stub. Set SETUP_CMD before the include. Resolve this project's dependencies." >&2
@@ -101,9 +102,10 @@ endif
 # report.mk in the r-project-report skill owns this target when that skill
 # is installed. This recipe is for a project without that include.
 ifndef PROJECT_REPORT_MK
-r-project-report: ## Write the requirements map and the reviews
+# help-group: Board
+project-report: ## Write the requirements map and the reviews
 ifeq ($(strip $(PROJECT_REPORT_CMD)),)
-	@printf '%s\n' "r-project-report: stub. Set PROJECT_REPORT_CMD before the include. Write build/project-report.md." >&2
+	@printf '%s\n' "project-report: stub. Set PROJECT_REPORT_CMD before the include. Write build/project-report.md." >&2
 	@exit 1
 else
 	mkdir -p build
@@ -118,6 +120,7 @@ endif
 ifeq ($(RENDER_DOCS),1)
 # help-docs
 .PHONY: docs
+# help-group: Gates
 docs: ## Render the docs
 ifeq ($(strip $(DOCS_CMD)),)
 	@printf '%s\n' "docs: stub. Set DOCS_CMD before the include. Run this project's renderer." >&2
@@ -132,6 +135,7 @@ endif
 ifeq ($(PUBLISH_IMAGE),1)
 # help-login
 .PHONY: login
+# help-group: Delivery
 login: ## Log in to the registry
 	@set -eu; \
 	test -n "$(REGISTRY)" || { printf '%s\n' "login: set REGISTRY to the registry host." >&2; exit 1; }; \
