@@ -31,7 +31,6 @@
     "build": "npm run generate && tsc --noEmit && vite build",
     "preview": "npm run build && node server/serve.mjs",
     "dashboard": "node server/bin/dashboard.mjs",
-    "package:binary": "npm run build && node scripts/build-binary.mjs",
     "prepack": "npm run build",
     "test": "vitest run"
   },
@@ -47,7 +46,6 @@
     "globals": "17.14.0",
     "happy-dom": "^17.4.4",
     "openapi-typescript": "^7.13.0",
-    "postject": "1.0.0-alpha.6",
     "prettier": "3.10.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

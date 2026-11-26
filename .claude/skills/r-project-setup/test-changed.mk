@@ -22,7 +22,7 @@ ifeq ($(strip $(TEST_CHANGED_CMD)),)
 else
 	@set -eu; \
 	mkdir -p build/coverage; \
-	base=$$(git merge-base HEAD origin/$(DEFAULT_BRANCH) 2>/dev/null || git merge-base HEAD $(DEFAULT_BRANCH) 2>/dev/null || git rev-parse -q --verify HEAD 2>/dev/null || git hash-object -t tree /dev/null); \
+	base=$$($(DIFF_BASE)); \
 	git diff --name-only "$$base" > build/coverage/changed.txt; \
 	git diff --name-only >> build/coverage/changed.txt; \
 	git diff --name-only --cached >> build/coverage/changed.txt; \

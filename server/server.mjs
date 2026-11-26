@@ -65,17 +65,6 @@ export function filesystemAssets(dist) {
   }
 }
 
-export function seaAssetReader(getAsset) {
-  return (rel) => {
-    if (typeof rel !== 'string' || rel.includes('\0') || rel.split('/').includes('..')) return null
-    try {
-      return Buffer.from(getAsset(rel))
-    } catch {
-      return null
-    }
-  }
-}
-
 function sendFile(res, method, file, body) {
   res.statusCode = 200
   res.setHeader('content-type', TYPES[path.posix.extname(file)] || 'application/octet-stream')

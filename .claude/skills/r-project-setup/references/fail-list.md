@@ -5,7 +5,7 @@ Report mode records each condition in the skeleton `templates/contract-report.md
 The repository fails this contract when:
 
 - `make` with no goal runs anything other than `help`
-- `CLAUDE.md` is missing, or it does not hold the stages, the installed language skills and subskills, the `<general_rules>` block of the template, and the communication contract
+- `CLAUDE.md` is missing, or it does not hold the stages, the installed language skills and subskills, and the import line `@.claude/skills/r-project-setup/rules.md`, or it holds a copy of that file
 - `setup`, `build`, or `test` is missing, `docs` is missing while the repository renders docs, `login` is missing while an image is published, or one of those targets is not `.PHONY`
 - `doctor`, `skills-install`, `skills-update`, or `old-board` is missing
 - `SETUP_CMD`, `BUILD_CMD`, or `TEST_CMD` is empty, or `DOCS_CMD` is empty while the repository renders docs

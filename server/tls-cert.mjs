@@ -1,5 +1,5 @@
-// Self-signed server certificate built with Node crypto, so the server,
-// the container, and the single-file binary do not need OpenSSL.
+// Self-signed server certificate built with Node crypto, so the server
+// and the container do not need OpenSSL.
 import { createPrivateKey, createSign, generateKeyPairSync, randomBytes, X509Certificate } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'

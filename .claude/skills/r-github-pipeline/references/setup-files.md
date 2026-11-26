@@ -45,6 +45,6 @@ A project on the Makefile of the `r-python` skill, the `r-go` skill, or the `r-n
 ## What the image and the repository contain
 
 - The image copies named files, not the work tree.
-- `templates/containerignore` is the list of paths that `.containerignore` keeps out of the image build. The list is `.git`, `.github`, `.claude/`, `apm_modules/`, `CLAUDE.md`, `docs/`, `build/`, `node_modules`, `data/`, `.env`, `.env.*`, and `*.tar`.
+- `templates/containerignore` is the list of paths that `.containerignore` keeps out of the image build. The list is `.git`, `.github`, `.claude/`, `apm_modules/`, `CLAUDE.md`, `docs/`, `build/`, `node_modules`, `data/`, `.env`, `.env.*`, and `*.tar`. Example data ships only from `examples/`, when the path and the name say that it is an example.
 - `.claude/skills/` is committed, because Make includes files from it. The image still excludes `.claude/`.
 - `templates/gitignore` is the list of paths that `.gitignore` keeps out of Git: build output, image tars, `data/`, and `.env`.

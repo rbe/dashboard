@@ -28,7 +28,26 @@ EDITORCONFIG = podman run --rm -v "$(CURDIR)":/check:Z $(EDITORCONFIG_IMAGE)
 # installs no system package.
 DIFF_COVER_IMAGE ?= docker.io/library/python:3.13
 
-DIFF_COVER = podman run --rm -e HOME=/tmp -e PYTHONDONTWRITEBYTECODE=1 -e REPORT $(PODMAN_NET_ARGS) -v "$(CURDIR)":/work:Z -w /work $(DIFF_COVER_IMAGE) sh -c 'set -eu; git config --global --add safe.directory /work; pip install --disable-pip-version-check --root-user-action=ignore -q --target /tmp/py "diff-cover==$(DIFF_COVER_VERSION)"; PYTHONPATH=/tmp/py python3 -m diff_cover.diff_cover_tool "$$REPORT" --diff-file build/coverage/change.diff --format markdown:build/coverage/diff.md --fail-under=0'
+DIFF_COVER = podman run --rm -e HOME=/tmp -e PYTHONDONTWRITEBYTECODE=1 -e REPORT $(PODMAN_NET_ARGS) -v "$(CURDIR)":/work:Z -w /work $(DIFF_COVER_IMAGE) sh -c 'set -eu; git config --global --add safe.directory /work; pip install --disable-pip-version-check --root-user-action=ignore -q --target /tmp/py "diff-cover==$(DIFF_COVER_VERSION)"; PYTHONPATH=/tmp/py python3 -m diff_cover.diff_cover_tool "$$REPORT" --diff-file build/change.diff --format markdown:build/coverage/diff.md --fail-under=0'
+
+# DIFF_BASE prints the commit that a change is measured against: the
+# merge base with the default branch, else HEAD, else the empty tree.
+DIFF_BASE = git merge-base HEAD origin/$(DEFAULT_BRANCH) 2>/dev/null || git merge-base HEAD $(DEFAULT_BRANCH) 2>/dev/null || git rev-parse -q --verify HEAD 2>/dev/null || git hash-object -t tree /dev/null
+
+# CHANGE_DIFF writes build/change.diff, the file that DIFF_COVER
+# reads: the diff against DIFF_BASE plus each untracked file that git does
+# not ignore, outside build/. It stages nothing. The file stays outside
+# build/coverage/, because a coverage tool may clean that directory.
+# `git diff --no-index` exits 1 when the
+# files differ, so only a status above 1 fails.
+CHANGE_DIFF = set -eu; \
+	mkdir -p build; \
+	base=$$($(DIFF_BASE)); \
+	git diff "$$base" > build/change.diff; \
+	git ls-files --others --exclude-standard -- . ':!build/' | while IFS= read -r file; do \
+	  status=0; git diff --no-index -- /dev/null "$$file" >> build/change.diff || status=$$?; \
+	  [ "$$status" -le 1 ]; \
+	done
 
 # Extra podman arguments of a container that reads the network: the
 # APM run of skills.mk, the GitHub CLI of sdlc.mk, and the pip runs of

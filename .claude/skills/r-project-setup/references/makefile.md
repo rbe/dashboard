@@ -107,4 +107,4 @@ The `sdlc.mk` of `r-github-pipeline` includes the same `contract.mk`, `doctor.mk
 
 ## `make coverage` and `make test-changed`
 
-The diff is the branch against the default branch. On the default branch the diff is empty, so the report has no line and `test-changed` runs no test. `coverage` runs `git add -N .`, so each new file is marked in the index and counts as changed.
+The diff is the branch against the default branch. On the default branch the diff is empty, so the report has no line and `test-changed` runs no test. Before `COVERAGE_CMD`, `coverage` writes `build/change.diff`, outside `build/coverage/`, which a coverage tool such as Vitest may clean, with `CHANGE_DIFF` of `tools.mk`. Each untracked file that git does not ignore counts as changed, and the recipe stages nothing. `DIFF_BASE` is the base of that diff and of `test-changed`. A `COVERAGE_CMD` does not write the diff again.
