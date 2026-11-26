@@ -67,6 +67,12 @@
 #                    subject and the subjects of the commits on the branch.
 #   CI_WAIT_SECONDS  seconds between two polls of ci-status. Default 15.
 #   CI_WAIT_TRIES    polls before ci-status stops waiting. Default 240.
+#   CI_BEFORE        ci-scope compares HEAD with this commit. The workflow
+#                    sets it to github.event.before. Empty or all zeros:
+#                    the merge base with origin/DEFAULT_BRANCH.
+#   CI_BOARD_FILES   the board files that ci-scope counts. A path that
+#                    ends in / is a directory. The default is the files
+#                    that the close of a task changes.
 
 ifndef SDLC_MK
 SDLC_MK := 1
@@ -107,6 +113,7 @@ GH_IMAGE ?= localhost/sdlc-gh:$(GH_VERSION)
 GH_REPO ?= $(OWNER)/$(NAME)
 CI_WAIT_SECONDS ?= 15
 CI_WAIT_TRIES ?= 240
+CI_BOARD_FILES ?= docs/history/ docs/ROADMAP.md docs/proposals/
 GH = podman run --rm -e GH_TOKEN -e GITHUB_TOKEN -e GH_HOST -e GITHUB_RUN_ID -e SDLC_ARTIFACT_AGE -e SDLC_KEEP_ARTIFACTS $(PODMAN_NET_ARGS) -v "$(CURDIR)":/work:Z -w /work $(GH_IMAGE)
 
 # Nearest ancestor tag whose name starts with v and a digit. Empty when
@@ -122,7 +129,7 @@ THIS_MAKE := $(MAKE)
 # directory cannot satisfy the build target.
 .PHONY: help version check-tag ci report setup build test docs publish-tags \
 	publish-container publish-github image run stop clean gh-image \
-	ci-status pull-request pull-request-merge \
+	ci-status ci-scope pull-request pull-request-merge \
 	cleanup-container-versions cleanup-github-releases cleanup-actions-artifacts
 
 # $(call SDLC_LOG,job,goal)
@@ -228,6 +235,39 @@ ci-status: ## Print the CI result of HEAD (SHA=<sha>). WAIT=1 waits for the end.
 	if [ "$$state" != completed ]; then echo "ci-status: $$name is $$state for commit $$sha. It is not finished. $$url" >&2; exit 1; fi; \
 	echo "ci-status: $$name $$result for commit $$sha. $$url"; \
 	if [ "$$result" != success ]; then exit 1; fi
+
+ci-scope: ## Match CI: print board-only=true when the push changes only board files and the CI run of its base passed
+	@set -eu; \
+	mkdir -p build/logs build/summaries; \
+	scope=false; base="$${CI_BEFORE:-}"; \
+	case "$$base" in *[!0]*) ;; *) base="" ;; esac; \
+	if [ -z "$$base" ]; then base=$$(git merge-base HEAD "origin/$(DEFAULT_BRANCH)" 2>/dev/null || true); fi; \
+	if [ "$${GITHUB_EVENT_NAME:-push}" != push ]; then \
+	  reason="the event is $${GITHUB_EVENT_NAME}, not push"; \
+	elif [ -z "$$base" ] || ! git cat-file -e "$$base^{commit}" 2>/dev/null; then \
+	  reason="the base commit is not in the clone"; \
+	else \
+	  other=$$(git diff --name-only "$$base" HEAD | while IFS= read -r file; do \
+	    board=0; \
+	    for path in $(CI_BOARD_FILES); do \
+	      case "$$path" in */) case "$$file" in "$$path"*) board=1 ;; esac ;; *) if [ "$$file" = "$$path" ]; then board=1; fi ;; esac; \
+	    done; \
+	    if [ "$$board" = 0 ]; then printf '%s\n' "$$file"; fi; \
+	  done); \
+	  if [ -n "$$other" ]; then \
+	    reason="the push changes $$(printf '%s\n' "$$other" | head -n 1), which is not a board file"; \
+	  elif ! $(THIS_MAKE) --no-print-directory ci-status SHA="$$base"; then \
+	    reason="the CI run of the base commit $$base did not pass"; \
+	  else \
+	    scope=true; reason="the push changes only board files since $$base, and the CI run of that commit passed"; \
+	  fi; \
+	fi; \
+	if [ "$$scope" = true ]; then line="ci-scope: setup, build, and test skip, because $$reason."; \
+	else line="ci-scope: setup, build, and test run, because $$reason."; fi; \
+	echo "$$line" | tee build/logs/ci-scope.log; \
+	printf '# ci-scope\n\n%s\n' "$$line" > build/summaries/ci-scope.md; \
+	echo "board-only=$$scope"; \
+	if [ -n "$${GITHUB_OUTPUT:-}" ]; then echo "board-only=$$scope" >> "$$GITHUB_OUTPUT"; fi
 
 pull-request: ## Open a pull request from this branch to the default branch. TITLE and BODY are optional
 	@set -eu; \
