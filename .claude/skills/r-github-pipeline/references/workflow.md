@@ -14,6 +14,10 @@ setup ──┬── build ──┬── publish-container ──┐
 - `test` runs beside `build`. The `test` job runs `make test`.
 - `report` has `if: ${{ !cancelled() }}` and is the last job.
 - `setup` runs `make cleanup-actions-artifacts` before it uploads.
+- `setup` checks out the full history and then runs `make ci-scope`. The job output `board-only` comes from that step.
+- If a push changes only the files of `CI_BOARD_FILES` and the CI run of its base commit passed, `setup` skips `make setup`. Then `build` and `test` skip, and `publish-*` skips with them.
+- The close of a task changes only board files, so its push runs no `make setup`, no `make build`, and no `make test`. `report` still runs.
+- A skipped job counts as passed for `make ci-status` and `make pull-request-merge`. A `workflow_dispatch` run never skips a job this way.
 
 ## Triggers and permissions
 

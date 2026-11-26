@@ -47,14 +47,26 @@ jobs:
     permissions:
       contents: read
       actions: write
+    outputs:
+      board-only: ${{ steps.scope.outputs.board-only }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - name: Free artifact storage
         env:
           GH_TOKEN: ${{ github.token }}
         run: make cleanup-actions-artifacts
-      - run: make setup
+      - name: Skip setup, build, and test for a push of board files only
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_BEFORE: ${{ github.event.before }}
+        run: make ci-scope
+      - if: steps.scope.outputs.board-only != 'true'
+        run: make setup
       - uses: actions/upload-artifact@v7
+        if: steps.scope.outputs.board-only != 'true'
         with:
           name: deps
           path: build/deps/node_modules.tar
@@ -72,7 +84,7 @@ jobs:
 
   build:
     needs: setup
-    if: success() && (github.event_name == 'push' || contains(fromJSON('["build","publish-container","report"]'), inputs.job))
+    if: success() && ((github.event_name == 'push' && needs.setup.outputs.board-only != 'true') || contains(fromJSON('["build","publish-container","report"]'), inputs.job))
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
@@ -100,7 +112,7 @@ jobs:
 
   test:
     needs: setup
-    if: success() && (github.event_name == 'push' || contains(fromJSON('["test","publish-container","report"]'), inputs.job))
+    if: success() && ((github.event_name == 'push' && needs.setup.outputs.board-only != 'true') || contains(fromJSON('["test","publish-container","report"]'), inputs.job))
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
@@ -130,7 +142,7 @@ jobs:
 
   docs:
     needs: setup
-    if: success() && (github.event_name == 'push' || contains(fromJSON('["docs","report"]'), inputs.job))
+    if: success() && ((github.event_name == 'push' && needs.setup.outputs.board-only != 'true') || contains(fromJSON('["docs","report"]'), inputs.job))
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7

@@ -123,7 +123,7 @@ describe('workflow', () => {
     for (const name of jobNames) {
       const calls = makeCalls(pipeline[name])
       if (name === 'setup') {
-        expect(calls, name).toEqual(['cleanup-actions-artifacts', 'setup'])
+        expect(calls, name).toEqual(['cleanup-actions-artifacts', 'ci-scope', 'setup'])
       } else if (name === 'test') {
         expect(calls, name).toEqual(['editorconfig', 'format', 'lint', 'test', 'integration', 'coverage'])
       } else if (name === 'publish-container') {
@@ -257,7 +257,8 @@ describe('workflow', () => {
     expect(pipeline['publish-container']).toContain('fetch-depth: 0')
     expect(pipeline['publish-container']).toContain('fetch-tags: true')
     expect(pipeline.test).toContain('fetch-depth: 0')
-    expect(source.match(/fetch-depth: 0/g)).toHaveLength(2)
+    expect(pipeline.setup).toContain('fetch-depth: 0')
+    expect(source.match(/fetch-depth: 0/g)).toHaveLength(3)
     expect(source.match(/fetch-tags: true/g)).toHaveLength(1)
     expect(pipeline['publish-container']).not.toContain('edge')
     expect(pipeline['publish-container']).not.toContain('sha-')
