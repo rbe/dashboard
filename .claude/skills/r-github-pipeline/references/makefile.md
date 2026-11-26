@@ -26,6 +26,7 @@ The project sets the command variables of `r-project-setup` above the include. I
 | `SDLC_KEEP_ARTIFACTS` | The artifact names that the hourly cleanup does not delete. The default is `report,docs` |
 | `SMOKE_PATH`, `SMOKE_NEEDLE`, `SMOKE_PAGE_NEEDLE` | In `templates/Makefile.node`: the API path and its needle, and the text that the page at `/` must hold. The defaults are `/api/health`, `ok`, and `id="root"`. An empty `SMOKE_PAGE_NEEDLE` turns the page check off |
 | `PORT`, `HOST_PORT` | In `templates/Makefile.node`: the port inside the container, and the port of the host that `make run` binds. `HOST_PORT` stays above 1024 and `run` fails below it |
+| `CI_BOARD_FILES` | The board files that `ci-scope` counts. A path that ends in `/` is a directory. The default is `docs/history/ docs/ROADMAP.md docs/proposals/` |
 | `HELP_LEAD` | The first line of `make help` |
 | `GH_BASE_IMAGE`, `GH_VERSION` | The base image and the release of the GitHub CLI image |
 | `OWNER`, `NAME` | The GitHub owner and the repository name. `ci-status` passes them as `-R owner/name`, and `pull-request` and `pull-request-merge` put them in the REST route, because the image has no Git |
@@ -50,6 +51,7 @@ The project sets the command variables of `r-project-setup` above the include. I
 | `publish-tags` | Prints the version. Prints `latest` only when the ref is the default branch or `GITHUB_REF` is not set |
 | `gh-image` | Builds the image of the GitHub CLI, one time |
 | `ci-status` | Prints the result of the CI run for `HEAD`, or for `SHA=<sha>`. Fails when the run failed, did not finish, or does not exist. `WAIT=1` waits for the end |
+| `ci-scope` | Prints `board-only=true` and writes it to `GITHUB_OUTPUT` when the push changes only `CI_BOARD_FILES` and `make ci-status` passes for the base commit. Else prints `board-only=false`. The base is `CI_BEFORE`, else the merge base with `origin/DEFAULT_BRANCH`. A missing base, another event than `push`, or any other file gives `false`. Writes the reason to `build/summaries/ci-scope.md` |
 | `pull-request` | Opens a pull request from the current branch to `DEFAULT_BRANCH`. `TITLE` and `BODY` are optional. Prints the open one when it exists. Uses `gh api` REST routes only |
 | `pull-request-merge` | Merges the pull request of the current branch when all check runs of its head commit passed. No check run, or one that did not pass, stops the merge. `WAIT=1` waits for the checks. Uses `gh api` REST routes only |
 | `cleanup-container-versions` | On the default branch, keeps one version and the next-lower run on the same `MAJOR.MINOR.PATCH` line. The kept version is `PUBLISHED_TAG`, else the content of `build/publish-version.txt`, else the newest rolling version by `created_at`. Needs no git tag. A missing package, or a list with no rolling version, is an empty list. Does not delete `latest` or a tag that is not `MAJOR.MINOR.PATCH-<run>`. A given tag that is not exactly one version stops the target, and the message names its source. In CI, off the default branch, deletes nothing |

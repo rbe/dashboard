@@ -2146,6 +2146,136 @@ class CheckTagRecipeTest(unittest.TestCase):
         self.assertIn(".PHONY: help version check-tag ci", sdlc)
 
 
+FAKE_SCOPE_GIT = """\
+case "$*" in
+    "merge-base HEAD origin/main") cat merge-base.txt 2>/dev/null || exit 1 ;;
+    "cat-file -e "*) grep -qx "${3%%^*}" known.txt ;;
+    "diff --name-only "*" HEAD") cat files.txt ;;
+    *) exit 1 ;;
+esac
+"""
+
+FAKE_CI_STATUS = """\
+printf '%s\\n' "$*" >> status.log
+[ -f passed.txt ]
+"""
+
+
+class CiScopeRecipeTest(unittest.TestCase):
+    """Runs the real ci-scope recipe of sdlc.mk in sh against a fake git."""
+
+    BOARD = "docs/history/ docs/ROADMAP.md docs/proposals/"
+
+    def scope(self, files, before="a1", event="push", passed=True, base=""):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "bin").mkdir()
+            for name, text in (("git", FAKE_SCOPE_GIT), ("status", FAKE_CI_STATUS)):
+                (root / "bin" / name).write_text(text, encoding="utf-8")
+                (root / "bin" / name).chmod(0o755)
+            (root / "files.txt").write_text("".join(f"{f}\n" for f in files))
+            (root / "known.txt").write_text("a1\nm1\n")
+            if base:
+                (root / "merge-base.txt").write_text(base + "\n")
+            if passed:
+                (root / "passed.txt").write_text("")
+            shell = expand_make_recipe(
+                "ci-scope",
+                {
+                    "DEFAULT_BRANCH": "main",
+                    "CI_BOARD_FILES": self.BOARD,
+                    "THIS_MAKE": str(root / "bin" / "status"),
+                },
+            )
+            output = root / "output.txt"
+            environment = {
+                "PATH": f"{root / 'bin'}:{os.environ['PATH']}",
+                "CI_BEFORE": before,
+                "GITHUB_EVENT_NAME": event,
+                "GITHUB_OUTPUT": str(output),
+            }
+            result = subprocess.run(
+                ["sh", "-c", shell],
+                cwd=tmp,
+                env=environment,
+                capture_output=True,
+                text=True,
+            )
+            written = output.read_text() if output.exists() else ""
+            calls = (
+                (root / "status.log").read_text()
+                if (root / "status.log").exists()
+                else ""
+            )
+            summary = (root / "build" / "summaries" / "ci-scope.md").read_text()
+            return result, written, calls, summary
+
+    def test_a_push_of_board_files_after_a_passed_run_skips(self):
+        """id: R-123"""
+        result, written, calls, summary = self.scope(
+            ["docs/history/H-1.md", "docs/ROADMAP.md", "docs/proposals/P-1.md"]
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(written, "board-only=true\n")
+        self.assertEqual(calls, "--no-print-directory ci-status SHA=a1\n")
+        self.assertIn("setup, build, and test skip", summary)
+
+    def test_a_new_branch_compares_with_the_merge_base(self):
+        """id: R-123"""
+        result, written, calls, _summary = self.scope(
+            ["docs/history/H-1.md"], before="0" * 40, base="m1"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(written, "board-only=true\n")
+        self.assertEqual(calls, "--no-print-directory ci-status SHA=m1\n")
+
+    def test_every_other_push_runs_the_jobs_and_names_the_reason(self):
+        """id: R-123"""
+        board = ["docs/history/H-1.md"]
+        cases = (
+            ({"files": ["docs/history/H-1.md", "src/main.go"]}, "src/main.go"),
+            ({"files": ["docs/ROADMAP.md.bak"]}, "docs/ROADMAP.md.bak"),
+            ({"files": ["docs/adr/ADR-1.md"]}, "docs/adr/ADR-1.md"),
+            ({"files": board, "passed": False}, "did not pass"),
+            ({"files": board, "event": "workflow_dispatch"}, "workflow_dispatch"),
+            ({"files": board, "before": "x9"}, "not in the clone"),
+            ({"files": board, "before": ""}, "not in the clone"),
+        )
+        for kwargs, reason in cases:
+            result, written, _calls, summary = self.scope(**kwargs)
+            self.assertEqual(result.returncode, 0, f"{kwargs} {result.stderr}")
+            self.assertEqual(written, "board-only=false\n", str(kwargs))
+            self.assertIn("setup, build, and test run", summary, str(kwargs))
+            self.assertIn(reason, summary, str(kwargs))
+
+    def test_the_workflow_templates_skip_the_jobs_only_on_a_push(self):
+        """id: R-123"""
+        for name in ("ci.make.yml", "ci.node.yml", "ci.gradle.yml"):
+            workflow = (ROOT / "skills/r-github-pipeline/templates" / name).read_text(
+                encoding="utf-8"
+            )
+            setup = workflow.split("\n  setup:\n")[1].split("\n  build:\n")[0]
+            self.assertIn("board-only: ${{ steps.scope.outputs.board-only }}", setup)
+            self.assertIn("fetch-depth: 0", setup)
+            self.assertIn("CI_BEFORE: ${{ github.event.before }}", setup)
+            self.assertLess(
+                setup.index("make cleanup-actions-artifacts"),
+                setup.index("make ci-scope"),
+            )
+            self.assertIn(
+                "- if: steps.scope.outputs.board-only != 'true'\n        run: make setup",
+                setup,
+            )
+            for job in ("build", "test"):
+                body = workflow.split(f"\n  {job}:\n")[1].split("\n\n")[0]
+                self.assertIn(
+                    "if: (github.event_name == 'push' &&"
+                    " needs.setup.outputs.board-only != 'true') ||",
+                    body,
+                    f"{name} {job}",
+                )
+
+
 class CleanupRecipeTest(unittest.TestCase):
     """Runs the real recipes of sdlc.mk in sh against a fake GitHub CLI."""
 
@@ -2349,6 +2479,7 @@ HELP_GROUP_OF = {
     "publish-container": "Delivery",
     "publish-github": "Delivery",
     "ci-status": "Delivery",
+    "ci-scope": "Delivery",
     "pull-request": "Delivery",
     "pull-request-merge": "Delivery",
     "cleanup-container-versions": "Delivery",
@@ -2475,7 +2606,7 @@ class HelpGroupsTest(unittest.TestCase):
             (
                 "Delivery",
                 "version check-tag publish-tags report image image-ci"
-                " publish-container ci-status pull-request pull-request-merge"
+                " publish-container ci-status ci-scope pull-request pull-request-merge"
                 " cleanup-container-versions cleanup-github-releases"
                 " cleanup-actions-artifacts",
             ),
