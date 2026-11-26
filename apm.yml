@@ -5,19 +5,24 @@ targets:
 dependencies:
   apm:
     - git: rbe/ralfskills
-      ref: v0.3.0
+      ref: v0.5.0
       skills:
-        - plan
-        - develop
-        - review
-        - release
-        - record
-        - project-report
-        - project-setup
-        - github-pipeline
-        - migrate-docs
-        - node
-        - shell
-        - security
-        - api-design
-        - ux-ui-design
+        - r-plan
+        - r-develop
+        - r-review
+        - r-release
+        - r-record
+        - r-project-report
+        - r-project-setup
+        - r-github-pipeline
+        - r-migrate-docs
+        - r-node
+        - r-shell
+        - r-security
+        - r-api-design
+        - r-ux-ui-design
+        - r-component-upgrade
+        - r-upgrade-node-components
+        - r-observability
+        - r-performance
+        - r-skills-review
