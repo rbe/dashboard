@@ -10,13 +10,13 @@ The report lists skill text that states one rule twice, lets two skills do one a
 </purpose>
 
 <inputs>
-- The scope is each `SKILL.md` and each file under `references/` of the installed skills, and the general rules and the communication contract of `CLAUDE.md`.
+- The scope is each `SKILL.md` and each file under `references/` of the installed skills, and `CLAUDE.md` with the `rules.md` file that it imports.
 - In this collection the installed skills are the folders `skills/r-*/`. In a project they are the folders `.claude/skills/*/`, with each project skill such as `orgme-plan`.
 - Scripts, templates, and makefiles of a skill are out of scope. Read them only as evidence for a contradiction.
 </inputs>
 
 <steps>
-1. List the installed skills. Read the general rules and the communication contract of `CLAUDE.md`.
+1. List the installed skills. Read `CLAUDE.md` and the `rules.md` file that it imports.
 2. Read each `SKILL.md` and each file under `references/` in full. Note the number of each line that states a rule or does an action.
 3. List the candidates of the three kinds. Read `references/finding-kinds.md` for the test of each kind.
 4. Try to refute each candidate. Drop a pointer, and drop a statement that differs in actor, condition, or stage.

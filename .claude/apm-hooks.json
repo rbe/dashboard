@@ -1,0 +1,20 @@
+{
+  "PreToolUse": [
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "sh \"${CLAUDE_PROJECT_DIR}/.claude/hooks/ralfskills/hooks/scripts/block-bare-git-add.sh\"",
+          "timeout": 10
+        },
+        {
+          "type": "command",
+          "command": "sh \"${CLAUDE_PROJECT_DIR}/.claude/hooks/ralfskills/hooks/scripts/block-python-file-write.sh\"",
+          "timeout": 10
+        }
+      ],
+      "_apm_source": "rbe/ralfskills"
+    }
+  ]
+}

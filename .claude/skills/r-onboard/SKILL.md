@@ -10,7 +10,7 @@ This skill is the order of the other skills. Each skill named in a step owns the
 </purpose>
 
 <steps>
-1. If `CLAUDE.md` is missing or has no `<general_rules>` block, read `.claude/skills/r-project-setup/templates/CLAUDE.md`. Its general rules apply to this run.
+1. If `CLAUDE.md` is missing or does not import `.claude/skills/r-project-setup/rules.md`, read that file. Its general rules apply to this run.
 2. Run `make -f .claude/skills/r-project-setup/doctor.mk doctor`. If the target fails, stop and tell the owner each `FAIL` line and its fix.
 3. Read the project before you ask a question.
    - Name the language from the manifest and the file types: `package.json`, `build.gradle`, `go.mod`, `pyproject.toml`, `*.py`, or a shell recipe.

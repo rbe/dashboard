@@ -16,8 +16,8 @@ Step 3 reads this section before it sets a command variable, and when a recipe r
 Step 7 reads this section when the file exists.
 
 - Add each paragraph of the template that is missing. Keep its other text, except as the last bullet says.
-- If the file has no `<general_rules>` block, add the section `## General rules` of the template before `## Communication contract`. If the block differs from the template, replace the block.
-- After the block is in the file, delete each sentence outside the block that the block states. Name each deleted sentence in the reply.
+- If the file has no line `@.claude/skills/r-project-setup/rules.md`, add the last paragraph and that line of the template at the end of the file.
+- Delete each copy of the sections `## General rules`, `## Agents`, and `## Communication contract`, and each other sentence that `rules.md` states. Name each deleted sentence in the reply.
 
 ## A test with no id
 

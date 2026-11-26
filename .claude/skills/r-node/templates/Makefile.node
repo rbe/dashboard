@@ -33,9 +33,6 @@ FORMAT_CMD = $(NODE_DEPS) && $(NODE) npm exec -- prettier --check .
 FORMAT_FIX_CMD = $(NODE_DEPS) && $(NODE) npm exec -- prettier --write .
 LINT_CMD = $(NODE_DEPS) && $(NODE) npm exec -- eslint .
 COVERAGE_CMD = set -eu; \
-	base=$$(git merge-base HEAD origin/$(DEFAULT_BRANCH) 2>/dev/null || git merge-base HEAD $(DEFAULT_BRANCH) 2>/dev/null || git rev-parse -q --verify HEAD 2>/dev/null || git hash-object -t tree /dev/null); \
-	git add -N .; \
-	git diff "$$base" > build/coverage/change.diff; \
 	NODE_V8_COVERAGE=/work/build/coverage/v8 $(NODE) node --test --experimental-test-coverage \
 	  --test-reporter=lcov --test-reporter-destination=build/coverage/lcov.info $(UNIT_TESTS); \
 	$(PYTHON) .claude/skills/r-project-report/scripts/node_cover_map.py; \

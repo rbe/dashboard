@@ -25,7 +25,7 @@ The include is `.claude/skills/r-project-setup/project.mk`. A repository that in
 | Check | State | Evidence |
 | --- | --- | --- |
 | `make` with no goal runs `help` | | |
-| `CLAUDE.md` names the stages, the installed language skills and subskills, the `<general_rules>` block of the template, and the communication contract | | |
+| `CLAUDE.md` names the stages, the installed language skills and subskills, and imports `.claude/skills/r-project-setup/rules.md` with no copy of it | | |
 | The Makefile includes `.claude/skills/r-project-setup/project.mk`, or `sdlc.mk` from `r-github-pipeline` when that file provides `help` | | |
 | The include sits before any target | | |
 | `setup`, `build`, and `test` exist and are `.PHONY` | | |

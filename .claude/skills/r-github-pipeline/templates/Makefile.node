@@ -70,9 +70,6 @@ COVERAGE_CMD = set -eu; \
 	$(NODE_DEPS); \
 	NODE_V8_COVERAGE=/work/build/coverage/v8 $(NODE_RUN) npm test -- --coverage; \
 	$(PYTHON) .claude/skills/r-project-report/scripts/node_cover_map.py; \
-	base=$$(git merge-base HEAD origin/$(DEFAULT_BRANCH) 2>/dev/null || git merge-base HEAD $(DEFAULT_BRANCH) 2>/dev/null || git rev-parse -q --verify HEAD 2>/dev/null || git hash-object -t tree /dev/null); \
-	git add -N .; \
-	git diff "$$base" > build/coverage/change.diff; \
 	report=$$(find . -name lcov.info -o -name coverage.xml | head -n 1); \
 	test -n "$$report"; \
 	REPORT="$$report" $(DIFF_COVER)

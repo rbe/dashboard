@@ -85,7 +85,8 @@ else
 	$(INTEGRATION_CMD)
 endif
 
-# COVERAGE_CMD writes build/coverage/diff.md. diff-cover is DIFF_COVER in tools.mk.
+# The recipe writes build/change.diff with CHANGE_DIFF of tools.mk,
+# then COVERAGE_CMD writes build/coverage/diff.md. diff-cover is DIFF_COVER.
 coverage: ## Report the lines this change touched
 ifeq ($(strip $(COVERAGE_CMD)),)
 	@printf '%s\n' "coverage: stub. Set COVERAGE_CMD before the include. Write build/coverage/diff.md for the lines this change touched." >&2
@@ -93,6 +94,7 @@ ifeq ($(strip $(COVERAGE_CMD)),)
 else
 	mkdir -p build/coverage
 	rm -f build/coverage/diff.md
+	$(CHANGE_DIFF)
 	$(COVERAGE_CMD)
 endif
 

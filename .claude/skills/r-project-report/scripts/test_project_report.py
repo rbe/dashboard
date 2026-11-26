@@ -427,18 +427,25 @@ class ChangedTestsTest(unittest.TestCase):
 
 
 ENTRY_FILES = ("CLAUDE.md", "skills/r-project-setup/templates/CLAUDE.md")
+RULES_FILE = "skills/r-project-setup/rules.md"
+IMPORT_LINES = {
+    "CLAUDE.md": "\n@skills/r-project-setup/rules.md\n",
+    "skills/r-project-setup/templates/CLAUDE.md": "\n@.claude/skills/r-project-setup/rules.md\n",
+}
+
+
+def rules_text():
+    """The rules file that each entry file imports."""
+    return (ROOT / RULES_FILE).read_text(encoding="utf-8")
 
 
 def general_rules():
-    """The general rules of the entry file and of its template.
+    """The general rules, which stand once, in the rules file.
 
     A skill does not repeat a general rule, so a test reads the rule here.
     """
-    found = []
-    for name in ENTRY_FILES:
-        text = (ROOT / name).read_text(encoding="utf-8")
-        found.append(text.split("<general_rules>", 1)[1].split("</general_rules>")[0])
-    return found
+    text = rules_text()
+    return [text.split("<general_rules>", 1)[1].split("</general_rules>")[0]]
 
 
 class RequirementFilesTest(unittest.TestCase):
@@ -568,31 +575,39 @@ class ReviewRulesTest(unittest.TestCase):
 
 
 class GeneralRulesTest(unittest.TestCase):
-    def test_the_entry_file_and_its_template_have_the_same_general_rules(self):
+    def test_the_entry_file_and_its_template_import_the_rules_file(self):
         """id: R-76"""
         for name in ENTRY_FILES:
             text = (ROOT / name).read_text(encoding="utf-8")
-            self.assertEqual(text.count("\n## General rules\n"), 1)
-            self.assertEqual(text.count("<general_rules>"), 1)
-            self.assertEqual(text.count("</general_rules>"), 1)
-            self.assertLess(
-                text.index("</general_rules>"),
-                text.index("\n## Communication contract\n"),
-            )
-        collection, template = general_rules()
-        self.assertEqual(collection, template)
+            self.assertEqual(text.count(IMPORT_LINES[name]), 1, name)
+            self.assertNotIn("<general_rules>", text, name)
+            self.assertNotIn("\n## Communication contract\n", text, name)
+        text = rules_text()
+        self.assertTrue(text.startswith("## General rules\n"))
+        self.assertEqual(text.count("<general_rules>"), 1)
+        self.assertEqual(text.count("</general_rules>"), 1)
+        self.assertLess(
+            text.index("</general_rules>"),
+            text.index("\n## Communication contract\n"),
+        )
 
-    def test_the_entry_file_and_its_template_stay_within_their_word_limits(self):
+    def test_the_entry_file_its_template_and_the_rules_stay_within_their_word_limits(
+        self,
+    ):
         """id: R-76"""
-        limits = {"CLAUDE.md": 966, "skills/r-project-setup/templates/CLAUDE.md": 1036}
+        limits = {
+            "CLAUDE.md": 140,
+            "skills/r-project-setup/templates/CLAUDE.md": 210,
+            RULES_FILE: 870,
+        }
         for name, limit in limits.items():
             text = (ROOT / name).read_text(encoding="utf-8")
             self.assertLessEqual(len(text.split()), limit, name)
 
-    def test_the_entry_file_and_its_template_have_the_agents_section(self):
+    def test_the_rules_file_has_the_agents_section(self):
         """id: R-109"""
-        for name in ENTRY_FILES:
-            text = (ROOT / name).read_text(encoding="utf-8")
+        for name in (RULES_FILE,):
+            text = rules_text()
             self.assertEqual(text.count("\n## Agents\n"), 1, name)
             self.assertLess(text.index("</general_rules>"), text.index("\n## Agents\n"))
             self.assertLess(
@@ -632,10 +647,10 @@ class GeneralRulesTest(unittest.TestCase):
         for path in (ROOT / "skills").glob("r-*/SKILL.md"):
             self.assertNotIn("<stage>", path.read_text(encoding="utf-8"), str(path))
 
-    def test_the_entry_file_and_its_template_hold_the_group_questions(self):
+    def test_the_rules_file_holds_the_group_questions(self):
         """id: R-51"""
-        for name in ENTRY_FILES:
-            text = (ROOT / name).read_text(encoding="utf-8")
+        for name in (RULES_FILE,):
+            text = rules_text()
             contract = text[text.index("\n## Communication contract\n") :]
             self.assertEqual(contract.count("\nQuestions:\n"), 1, name)
             self.assertLess(
@@ -1934,12 +1949,35 @@ class MakeAndPodmanInterfaceTest(unittest.TestCase):
     def test_the_diff_base_falls_back_to_the_local_default_branch(self):
         """id: R-12"""
         base = "git merge-base HEAD $(DEFAULT_BRANCH) 2>/dev/null || git rev-parse"
+        tools = (ROOT / "skills/r-project-setup/tools.mk").read_text(encoding="utf-8")
+        self.assertIn("DIFF_BASE = ", tools)
+        self.assertIn(base, tools)
         paths = list(ROOT.glob("skills/*/templates/Makefile.*"))
         paths.append(ROOT / "skills/r-project-setup/test-changed.mk")
+        paths.append(ROOT / "Makefile")
+        for path in paths:
+            self.assertNotIn(
+                "git merge-base", path.read_text(encoding="utf-8"), str(path)
+            )
+
+    def test_coverage_writes_the_change_diff_and_stages_no_file(self):
+        """id: R-12"""
+        tools = (ROOT / "skills/r-project-setup/tools.mk").read_text(encoding="utf-8")
+        self.assertIn("CHANGE_DIFF = ", tools)
+        self.assertIn("git ls-files --others --exclude-standard", tools)
+        self.assertIn("> build/change.diff", tools)
+        self.assertIn("--diff-file build/change.diff", tools)
+        self.assertNotIn("build/coverage/change.diff", tools)
+        contract = (ROOT / "skills/r-project-setup/contract.mk").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("\t$(CHANGE_DIFF)\n\t$(COVERAGE_CMD)\n", contract)
+        paths = list(ROOT.glob("skills/*/templates/Makefile.*"))
+        paths.append(ROOT / "Makefile")
         for path in paths:
             text = path.read_text(encoding="utf-8")
-            if "git merge-base" in text:
-                self.assertIn(base, text, str(path))
+            self.assertNotIn("git add -N", text, str(path))
+            self.assertNotIn("change.diff", text, str(path))
 
     def test_make_finds_the_default_branch_without_an_override(self):
         """id: R-12"""
