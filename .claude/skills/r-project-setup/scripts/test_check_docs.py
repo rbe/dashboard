@@ -165,3 +165,29 @@ class CheckDocsTest(unittest.TestCase):
             "skills/r-github-pipeline/sdlc.mk",
         ):
             self.assertIn("check-docs.mk", (ROOT / name).read_text(encoding="utf-8"))
+
+    def test_a_language_target_is_named_only_by_its_language_skills(self):
+        """id: R-111"""
+        owners = {
+            "r-node": ("npm", "node-tooling"),
+            "r-python": ("python-tooling",),
+            "r-go": ("go", "go-tooling"),
+            "r-jvm": ("wrapper", "jvm-tooling", "podman-socket"),
+        }
+        upgrade = {
+            "r-node": "r-upgrade-node-components",
+            "r-python": "r-upgrade-python-components",
+            "r-go": "r-upgrade-go-components",
+            "r-jvm": "r-upgrade-java-components",
+        }
+        found = []
+        for path in sorted((ROOT / "skills").glob("r-*/**/*.md")):
+            skill = path.relative_to(ROOT / "skills").parts[0]
+            text = path.read_text(encoding="utf-8")
+            for owner, targets in owners.items():
+                if skill in (owner, upgrade[owner]):
+                    continue
+                for target in targets:
+                    if f"`make {target}`" in text or f"`make {target} " in text:
+                        found.append(f"{path.relative_to(ROOT)}: make {target}")
+        self.assertEqual(found, [])
