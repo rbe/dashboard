@@ -54,12 +54,10 @@ SETUP_CMD = set -eu; \
 	$(NODE_RUN) sh -c 'npm audit --audit-level=high || echo "npm audit reported advisories; continuing"'; \
 	tar -cf build/deps/node_modules.tar node_modules; \
 	printf '\# setup\n\nNode %s. Dependencies packed.\n' "$(NODE_VERSION)" > build/summaries/setup.md
-# build makes and smokes the Linux binary, then image-ci of container.mk
-# builds the image, runs SMOKE_CMD, and saves the image tar.
+# build runs image-ci of container.mk: it builds the image, runs SMOKE_CMD,
+# and saves the image tar.
 BUILD_CMD = set -eu; \
 	$(NODE_DEPS); \
-	$(NODE_RUN) npm run package:binary; \
-	$(NODE_RUN) node scripts/smoke-binary.mjs build/$(NAME); \
 	$(THIS_MAKE) --no-print-directory image-ci
 TEST_CMD = set -eu; \
 	$(NODE_DEPS); \
