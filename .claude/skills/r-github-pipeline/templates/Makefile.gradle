@@ -1,0 +1,117 @@
+# Gradle app delivered as a container image and a GitHub release of the JAR.
+# Make contract: r-project-setup. help is the default goal. The target
+# names are setup, build, test, editorconfig, format, format-fix, lint,
+# integration, coverage, docs, and login. This makefile sets the command
+# variables of the contract and defines none of those targets again.
+# Gradle, Podman, and python run inside the commands. The Gradle case is
+# build: BUILD_CMD runs Gradle. The workflow runs `make build`.
+# GitHub makefile: set the product values and the command variables, and
+# include sdlc.mk from the installed skill before any target. sdlc.mk
+# already defines help, so leave project.mk out. sdlc.mk adds the
+# contract targets, the image targets, version, publish tags, cleanup,
+# and report.
+# A repo that does not publish a release deletes publish-github below and
+# drops it from SDLC_JOBS.
+
+NAME ?= app
+OWNER ?= owner
+IMAGE_NAME ?= ghcr.io/$(OWNER)/$(NAME)
+IMAGE ?= $(IMAGE_NAME)
+PACKAGE ?= $(OWNER)/$(NAME)
+KEEP_VERSIONS ?= 2
+SDLC_JOBS ?= setup build test publish-container publish-github
+
+JDK_IMAGE ?= docker.io/library/eclipse-temurin:25-jdk
+JRE_IMAGE ?= docker.io/library/eclipse-temurin:25-jre
+CI_IMAGE ?= localhost/$(NAME):ci
+JAR_GLOB ?= build/libs/$(NAME)-*.jar
+GRADLE ?= podman run --rm $(PODMAN_NET_ARGS) -e CI -e GRADLE_USER_HOME=/gradle -v "$$HOME/.gradle":/gradle:Z -v "$(CURDIR)":/work:Z -w /work $(JDK_IMAGE) ./gradlew --console=plain
+
+# The command variables of the contract. A # inside one is written \#.
+SETUP_CMD = set -eu; \
+	mkdir -p "$$HOME/.gradle" build/logs build/summaries; \
+	$(GRADLE) --version; \
+	$(GRADLE) dependencies --configuration runtimeClasspath > build/logs/dependencies.txt; \
+	printf '\# setup\n\nDependencies resolved into the Gradle cache.\n' > build/summaries/setup.md
+BUILD_CMD = set -eu; \
+	$(GRADLE) assemble; \
+	jars=$$(ls $(JAR_GLOB) 2>/dev/null | grep -v -- '-original.jar$$' || true); \
+	test "$$(printf '%s\n' "$$jars" | grep -c .)" -eq 1; \
+	mkdir -p build/dist build/summaries; \
+	cp "$$jars" build/dist/$(NAME).jar; \
+	printf '\# build\n\nJAR build/dist/%s.jar\n' "$(NAME)" > build/summaries/build.md
+TEST_CMD = set -eu; \
+	$(GRADLE) test; \
+	mkdir -p build/summaries; \
+	printf '\# test\n\nJUnit XML in build/test-results.\n' > build/summaries/test.md
+FORMAT_CMD = $(GRADLE) spotlessCheck
+FORMAT_FIX_CMD = $(GRADLE) spotlessApply
+LINT_CMD = $(GRADLE) checkstyleMain checkstyleTest
+# No integration entry. The build.gradle of the r-jvm skill has no integrationTest task.
+INTEGRATION_CMD = true
+COVERAGE_CMD = set -eu; \
+	$(GRADLE) test jacocoTestReport; \
+	$(PYTHON) .claude/skills/r-project-report/scripts/jacoco_cover_map.py; \
+	base=$$(git merge-base HEAD origin/$(DEFAULT_BRANCH) 2>/dev/null || git merge-base HEAD $(DEFAULT_BRANCH) 2>/dev/null || git rev-parse -q --verify HEAD 2>/dev/null || git hash-object -t tree /dev/null); \
+	git add -N .; \
+	git diff "$$base" > build/coverage/change.diff; \
+	report=$$(find build -name jacocoTestReport.xml | head -n 1); \
+	test -n "$$report"; \
+	REPORT="$$report" $(DIFF_COVER)
+# The tests that cover the diff. make coverage writes the coverage map.
+# The map has one entry for each test JVM. Set forkEvery = 1 on the test task.
+TEST_CHANGED_CMD = chosen=$$($(PYTHON) .claude/skills/r-project-report/scripts/changed_tests.py --print) || exit 1; \
+	chosen=$$(printf '%s' "$$chosen" | tr '\n' ' '); \
+	if [ -z "$$chosen" ]; then printf '%s\n' "test-changed: no test covers the changed files. make test runs the full suite."; \
+	else printf 'test-changed: %s\n' "$$chosen"; args=""; for name in $$chosen; do args="$$args --tests $$name"; done; $(GRADLE) test $$args; fi
+
+# login comes from the contract when PUBLISH_IMAGE is set. The docs target
+# stays off, because no skill ships scripts/render-docs.py. A repository
+# that writes that renderer sets RENDER_DOCS = 1, adds docs to SDLC_JOBS and
+# SDLC_CI, and adds a docs job to the workflow.
+DOCS_CMD = set -eu; \
+	mkdir -p build/docs build/summaries; \
+	if find docs -name '*.md' 2>/dev/null | grep -q .; then $(PYTHON) scripts/render-docs.py docs build/docs; fi; \
+	printf '\# docs\n\n%s HTML files.\n' "$$(find build/docs -type f | wc -l | tr -d ' ')" > build/summaries/docs.md
+PUBLISH_IMAGE = 1
+SDLC_CI ?= setup build editorconfig format lint test integration coverage report
+
+# The image targets come from container.mk. make image builds the image
+# from the tested JAR. No Gradle runs in it, and nothing is pushed.
+# publish-container builds that image first.
+CONTAINERFILE = build/image-context/Containerfile
+IMAGE_CONTEXT = build/image-context
+IMAGE_BUILD_ARGS = --build-arg JRE_IMAGE=$(JRE_IMAGE)
+IMAGE_PREPARE = test -f build/dist/$(NAME).jar; \
+	rm -rf build/image-context; \
+	mkdir -p build/image-context; \
+	cp build/dist/$(NAME).jar build/image-context/app.jar; \
+	cp Containerfile build/image-context/Containerfile
+PUBLISH_PREPARE = $(THIS_MAKE) --no-print-directory image
+
+include .claude/skills/r-github-pipeline/sdlc.mk
+
+# Project targets.
+
+.PHONY: publish-github clean
+
+publish-github: ## Match CI: release MAJOR.MINOR.PATCH-run with the tested JAR
+	@$(call SDLC_LOG,publish-github,_publish-github)
+
+clean: ## Remove build/ and .gradle/
+	rm -rf build .gradle
+
+_publish-github:
+	@set -eu; \
+	test -f build/dist/$(NAME).jar; \
+	version=$$($(THIS_MAKE) -s --no-print-directory version); \
+	asset=build/dist/$(NAME)-$$version.jar; \
+	cp build/dist/$(NAME).jar "$$asset"; \
+	$(THIS_MAKE) --no-print-directory gh-image; \
+	if $(GH) release view "$$version" -R "$(PACKAGE)" >/dev/null 2>&1; then \
+	  $(GH) release upload "$$version" "$$asset" -R "$(PACKAGE)" --clobber; \
+	else \
+	  $(GH) release create "$$version" "$$asset" -R "$(PACKAGE)" --title "$$version" \
+	    --notes "Build $$version." --target "$$(git rev-parse HEAD)"; \
+	fi; \
+	printf '# publish-github\n\nStatus: released\nRelease: %s\n' "$$version" > build/summaries/publish-github.md

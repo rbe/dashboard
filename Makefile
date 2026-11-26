@@ -106,7 +106,7 @@ SMOKE_CMD = name=$(NAME)-smoke; \
 	test "$$ok" = 1; \
 	printf '%s\n' "$$page" | grep -q 'id="root"'
 
-include .claude/skills/github-pipeline/sdlc.mk
+include .claude/skills/r-github-pipeline/sdlc.mk
 
 # Project targets.
 
