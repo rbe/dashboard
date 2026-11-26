@@ -75,9 +75,6 @@ INTEGRATION_CMD = true
 COVERAGE_CMD = set -eu; \
 	$(NODE_DEPS); \
 	$(NODE_RUN) npm test -- --coverage; \
-	base=$$(git merge-base HEAD origin/$(DEFAULT_BRANCH) 2>/dev/null || git merge-base HEAD $(DEFAULT_BRANCH) 2>/dev/null || git rev-parse -q --verify HEAD 2>/dev/null || git hash-object -t tree /dev/null); \
-	git add -N .; \
-	git diff "$$base" > build/coverage/change.diff; \
 	REPORT=build/coverage/lcov.info $(DIFF_COVER)
 TEST_CHANGED_CMD = set -eu; \
 	$(NODE_DEPS); \
