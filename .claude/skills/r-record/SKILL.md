@@ -1,6 +1,6 @@
 ---
 name: r-record
-description: Assigns ids and writes the board documents and the indexes. Use before creating or editing a roadmap row, a requirement row, an ADR, a proposal, or a history file, and to close a task. Rejects a duplicate id and an id above its counter.
+description: Assigns ids and writes the board documents, the glossary, and the indexes. Use before creating or editing a roadmap row, a requirement row, an ADR, a proposal, a history file, or a glossary row, and to close a task. Rejects a duplicate id and an id above its counter.
 ---
 
 The general rules in `CLAUDE.md` apply.
@@ -13,7 +13,7 @@ The agent writes each document by hand from a template in `templates/` beside th
 <steps>
 1. Run `make ids`. If it exits non-zero, an id is a duplicate or above its counter: stop and do not write the document. In step 3 of `r-migrate-docs`, a failure that names an old label with no counter does not stop you. Without the include of `project.mk` or `sdlc.mk`, run `make -f .claude/skills/r-record/index.mk <target>`. `PYTHON_IMAGE=<image>` on that line replaces the default image.
 2. For a new item, run `make id KIND=<kind>`. It prints the next id and raises the counter. Read `references/id-kinds.md` for the form of each kind.
-3. If the document does not exist, copy its template: `ROADMAP.md`, `adr.md`, `proposal.md`, or `history.md`. Keep the layout. Before you write frontmatter or a table row for the first time in a task, read `references/documents.md`.
+3. If the document does not exist, copy its template: `ROADMAP.md`, `adr.md`, `proposal.md`, `history.md`, or `glossary.md`. Keep the layout. Before you write frontmatter or a table row for the first time in a task, read `references/documents.md`.
 4. If a choice must hold, read `references/adr.md` and write it where it says. If no home fits, ask the user.
 5. If the document is an ADR, follow `references/adr.md`.
 6. If the caller asks for a new history file or for a stage section, read `references/history.md`. Write a new file from `templates/history.md`. Set `roadmap:` to the row of the task, and add that row when the task has none.
@@ -38,6 +38,7 @@ The agent writes each document by hand from a template in `templates/` beside th
 - A frontmatter list of ids follows `references/documents.md`: ids only, one form, and no id above its counter.
 - A history file follows `references/history.md`: it holds facts only. Open work is a roadmap row, or a planned row of `docs/requirements/`.
 - A defect and an open question are roadmap rows. A question row states the choices.
+- `docs/glossary.md` holds one row for each term: the term, its meaning in one sentence, and its path. A term has one row, and a thing has one term. If the thing goes, delete its row.
 - A defect that the owner reports gets a roadmap row of the kind `defect` through `r-record`, then starts at `r-develop`. A defect with no known expected behaviour starts at `r-plan`. Read `references/defect-report.md` before you write the report of a defect.
 - A question that the owner has not answered is never in a history file.
 - To read one requirement row or one ADR, run `make req ID=<ids>`. To find rows, run `make req Q=<word>`, `OWNER=<skill>`, or `STATUS=planned`. Do not open a whole file of `docs/requirements/` for one row.

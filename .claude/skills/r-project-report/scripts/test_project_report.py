@@ -478,6 +478,25 @@ def general_rules():
     return [text.split("<general_rules>", 1)[1].split("</general_rules>")[0]]
 
 
+class GlossaryTest(unittest.TestCase):
+    def test_the_contract_and_the_state_report_use_the_glossary_that_record_writes(
+        self,
+    ):
+        """id: R-153"""
+        self.assertIn("`docs/glossary.md`", rules_text())
+        record = ROOT / "skills" / "r-record"
+        template = (record / "templates" / "glossary.md").read_text(encoding="utf-8")
+        self.assertIn("| Term | Meaning | Path |", template)
+        self.assertIn(
+            "`glossary.md`", (record / "SKILL.md").read_text(encoding="utf-8")
+        )
+        report = (ROOT / "skills" / "r-system-state-report" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Read `docs/glossary.md`", report)
+        self.assertNotIn("Build the glossary", report)
+
+
 class RequirementFilesTest(unittest.TestCase):
     def files(self):
         return sorted((ROOT / "docs" / "requirements").glob("*.md"))

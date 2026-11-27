@@ -5,6 +5,7 @@
 - The scripts read a table row for a roadmap row and for a requirement row.
 - `docs/ROADMAP.md` has the columns Id, Kind, Title, and Proposal. The kind is `feature`, `defect`, or `question`. The proposal cell is a link or empty.
 - `docs/requirements/<skill>.md` holds the rows of the skill that owns them, and `docs/requirements/collection.md` holds a row with no owning skill. Each file has the columns Id, Title, and Statement. A repository with no `docs/adr/` has the columns Id, Title, Status, and Statement, and no `docs/ROADMAP.md`. The status is `planned` or `in force`. A planned row is open work, and its statement names the choices of an open question.
+- `docs/glossary.md` has the columns Term, Meaning, and Path. The meaning is one sentence. The path is a path in the project, or `none` for a thing that has no file, such as an actor. The rows stand in the order of the terms. A term is no id, so the row has no anchor.
 - The scripts read a frontmatter block for an ADR, a proposal, and a history file.
 - Write a list in the frontmatter on one line, as `skills: [a, b]`.
 - In the frontmatter and in the id cell of a table, an id is plain text. The scripts read it there.

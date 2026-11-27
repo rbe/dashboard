@@ -21,6 +21,12 @@ If no home fits, the agent asks the user. A choice that need not hold has no hom
 - `## Divergence`: only in an ADR that replaces a skill rule. A pipeline divergence goes where `r-github-pipeline` says, and every other divergence is an ADR.
 - Keep the ADR short. Do not copy the grill.
 
+## Frontmatter
+
+- An ADR file has no `version` key and no `date` key. Git holds both.
+- The `status` is `Accepted` or `Superseded`. The same holds for `template.md` of `docs/adr/`.
+- `make ids` fails on a break of these rules.
+
 ## Status
 
 - `r-record` owns the status.

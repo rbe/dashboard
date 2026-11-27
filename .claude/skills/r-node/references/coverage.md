@@ -20,3 +20,9 @@
   1. Leave the map step out of `coverage`.
   2. Set the Makefile variable `TEST_CHANGED_CMD` to the value `vitest related --run` with the files in `build/coverage/changed.txt`. Vitest then selects the tests from its module graph.
   3. Ask `r-record` where that choice goes, as a requirement row or an ADR.
+
+## Vitest facts
+
+- An agent that runs Vitest gets a reporter that hides the console output of passing tests. Pass `--reporter=default` to see it.
+- A client test that has no Node types sets an environment variable with `vi.stubEnv`. It restores the value with `vi.unstubAllEnvs`.
+- The jsdom runner replaces each stylesheet with an empty string. A test that reads CSS runs under Node.

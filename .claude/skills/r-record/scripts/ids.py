@@ -24,6 +24,9 @@ ID_FORM = re.compile(
 # `decisions` and `issues` are the keys of a history file written before
 # the roadmap table. A new file writes `roadmap`. The check is the same.
 LIST_KEY = re.compile(r"^(adrs|decisions|issues|roadmap|proposals|supersedes):(.*)$")
+FRONT_KEY = re.compile(r"^([A-Za-z_]+):(.*)$")
+ADR_STATUSES = ("Accepted", "Superseded")
+ADR_FORBIDDEN_KEYS = ("version", "date")
 
 
 def repo_root(start):
@@ -173,6 +176,36 @@ def list_errors(docs, counters):
     return errors
 
 
+def front_keys(lines):
+    """The key and value of each frontmatter line that starts at the margin."""
+    if not lines or lines[0].strip() != "---":
+        return []
+    found = []
+    for index in range(1, len(lines)):
+        if lines[index].strip() == "---":
+            break
+        match = FRONT_KEY.match(lines[index])
+        if match:
+            found.append((index, match.group(1), match.group(2).strip().strip("'\"")))
+    return found
+
+
+def adr_errors(docs):
+    """An ADR has no `version` key and no `date` key, and its status is Accepted or Superseded."""
+    errors = []
+    for path in sorted((docs / "adr").glob("*.md")):
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for index, key, value in front_keys(lines):
+            place = f"{path}:{index + 1}"
+            if key in ADR_FORBIDDEN_KEYS:
+                errors.append(f"{place} an ADR has no {key} key: Git holds it")
+            elif key == "status" and value not in ADR_STATUSES:
+                errors.append(
+                    f"{place} status is {value}: write Accepted or Superseded"
+                )
+    return errors
+
+
 def check(root):
     docs = root / "docs"
     live = live_ids(docs)
@@ -182,6 +215,7 @@ def check(root):
             f"{docs / 'REQUIREMENTS.md'} exists: move its rows to docs/requirements/<skill>.md"
         )
     errors += list_errors(docs, counters)
+    errors += adr_errors(docs)
     for ident, places in sorted(live.items()):
         if len(places) > 1:
             errors.append(f"{ident} is used {len(places)} times: {', '.join(places)}")

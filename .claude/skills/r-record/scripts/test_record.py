@@ -115,6 +115,33 @@ class IdsTest(unittest.TestCase):
             any("ids.yaml:4 has a second counter for R" in e for e in errors)
         )
 
+    def test_an_adr_with_a_version_key_or_a_date_key_fails(self):
+        """id: R-152"""
+        self.write("docs/ids.yaml", "ADR: 2\n")
+        self.write(
+            "docs/adr/0001-one.md",
+            "---\nid: ADR-0001\nstatus: Accepted\nversion: 2\ndate: 2026-11-27\n---\n",
+        )
+        errors = ids.check(self.root)
+        self.assertTrue(
+            any("0001-one.md:4 an ADR has no version key" in e for e in errors)
+        )
+        self.assertTrue(
+            any("0001-one.md:5 an ADR has no date key" in e for e in errors)
+        )
+
+    def test_an_adr_status_must_be_accepted_or_superseded(self):
+        """id: R-152"""
+        self.write("docs/ids.yaml", "ADR: 3\n")
+        self.write("docs/adr/ADR-0001.md", "---\nid: ADR-0001\nstatus: Accepted\n---\n")
+        self.write(
+            "docs/adr/ADR-0002.md", "---\nid: ADR-0002\nstatus: Superseded\n---\n"
+        )
+        self.write("docs/adr/template.md", "---\nid: ADR-0003\nstatus: Proposed\n---\n")
+        errors = ids.check(self.root)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("template.md:3 status is Proposed", errors[0])
+
     def test_next_id_raises_the_counter_and_never_gives_a_number_twice(self):
         """id: R-13"""
         self.write("docs/ids.yaml", "R: 7\nW: 5\nADR: 14\nP: 0\n")

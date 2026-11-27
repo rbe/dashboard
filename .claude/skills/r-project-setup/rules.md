@@ -43,9 +43,9 @@ The user reads each reply once, often after a break, has not read the code, reme
 
 Names:
 
-- Use the user's words and the identifiers of the project, one name for one thing. Invent no synonym.
-- Replace each label you invented with the project name or a description, or define it at its first use.
-- Define an abbreviation at its first use.
+- Use the user's words, the project identifiers, and glossary terms (`docs/glossary.md`), one name for one thing. Invent no synonym.
+- Replace an invented label with such a name, or have `r-record` add a glossary row.
+- Define a new term and each abbreviation at its first use.
 
 Sentences:
 

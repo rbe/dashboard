@@ -18,10 +18,10 @@ The report is successful if the reader understands each sentence on the first re
    - `build/project-report.md`, after you run `make project-report`, when `r-project-report` is installed.
    - The current chat, and the transcripts or notes that the user supplies.
    - The result of `make test`, and of the target that `CLAUDE.md` names for starting the system. Run each only if it changes no data and no external system. Record the real result.
-2. Build the glossary before you write the report.
+2. Read `docs/glossary.md` before you write the report.
    - List the things that the report must name: components, data, actors, processes.
-   - Select one name for each thing, as the names rules of the communication contract say.
-   - Write a table: the name, what it is in one sentence, and its path in the project.
+   - Use the term that `docs/glossary.md` gives for each thing.
+   - If a thing has no term, ask `r-record` to add its row before you write the report. If the file does not exist, `r-record` creates it.
 3. Write the report in the language of the user. Use these sections in this order. If a section has no content, say so in one line.
    1. Summary. Maximum 5 sentences: what the system does now, the largest difference from what was asked, and the number of decisions that wait for the human.
    2. What the system does now. A list of behaviours that a person can observe, in the form "When [actor] does [action], the system does [result]." Do not list files or modules.
@@ -30,7 +30,7 @@ The report is successful if the reader understands each sentence on the first re
    5. Not verified. What you could not run or read, and what only a chat claims.
    6. Risks and defects. Only those that you can point to, each with the location and the effect.
    7. Decisions for you. Each item is a question that the human answers with a selection. Give the options, the effect of each option, and your recommendation with one reason.
-   8. Glossary. The table from step 2.
+   8. Glossary. Copy the rows of `docs/glossary.md` for each term that the report uses. The reader of the report then needs no other file.
 4. Read `references/cold-reader.md` and run the cold-reader check.
 5. Save the report as `reports/state-YYYY-MM-DD.md`. `make links` reads only `docs/`, so write each id in the report as a link by hand.
 6. For each choice with the board row `none` that must hold, ask `r-record` where it goes. A decision that need not hold gets no row. For each defect of section 6 and each question of section 7, ask `r-record` for a roadmap row of the kind `defect` or `question`.
