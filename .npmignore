@@ -23,7 +23,6 @@ release/
 node_modules/
 **/*.test.mjs
 **/*.test.ts
-scripts/render-docs.mjs
 server/serve.mjs
 client/
 shared/schema.ts

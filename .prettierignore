@@ -12,5 +12,4 @@ package-lock.json
 data/
 shared/schema.ts
 node_modules/
-# The workflows keep their quotes. scripts/workflows.test.mjs reads them as text.
 .github/
