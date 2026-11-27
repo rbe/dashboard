@@ -21,6 +21,28 @@ NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_.-]*$")
 DEFINITION_PATTERN = re.compile(r"^([^\s#:=$%(][^:=#]*?)\s*:(?![=:])")
 SKIPPED_DIRECTORIES = {".git", "build", "node_modules", "apm_modules"}
 PLACEHOLDER_CHARACTERS = "<*{[$"
+# A skill text may name a target that an optional skill defines. A product
+# that does not install that skill is not told the target is missing.
+OPTIONAL_SKILL_TARGETS = {
+    "r-github-pipeline": {
+        "ci",
+        "ci-status",
+        "image",
+        "pull-request",
+        "pull-request-merge",
+        "publish-container",
+        "publish-github",
+        "report",
+        "run",
+        "version",
+    },
+    "r-go": {"go", "go-tooling", "run"},
+    "r-jvm": {"jvm-tooling", "podman-socket", "wrapper"},
+    "r-node": {"node-tooling", "npm"},
+    "r-python": {"python-tooling"},
+    "r-board-merge-report": {"board-numbers"},
+    "r-migrate-docs": {"old-board-delete"},
+}
 
 
 def skill_directory(root):
@@ -132,10 +154,21 @@ def path_exists(root, name, strict):
     return not strict and not present
 
 
+def uninstalled_targets(directory):
+    """The targets that only a skill missing from `directory` defines."""
+    owned = {}
+    for skill, names in OPTIONAL_SKILL_TARGETS.items():
+        if not (directory / skill / "SKILL.md").is_file():
+            owned[skill] = names
+    return set().union(*owned.values()) if owned else set()
+
+
 def problems(root):
     directory = skill_directory(root)
     strict = directory == root / "skills"
     targets = defined_targets(root)
+    if not strict:
+        targets |= uninstalled_targets(directory)
     errors = []
     for path in text_files(directory):
         shown = path.relative_to(root)

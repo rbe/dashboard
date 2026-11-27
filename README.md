@@ -12,7 +12,7 @@ The running app is the container image. The app pipeline does not publish a GitH
 podman pull ghcr.io/rbe/dashboard:latest
 ```
 
-The image is `linux/amd64`. `make run` builds it locally and listens on https://127.0.0.1:4173. The certificate is self-signed. The first launch writes it to `data/tls/cert.pem`, and the browser asks before trusting it.
+The published image is a manifest list for `linux/amd64` and `linux/arm64`. `make run` builds it locally and listens on https://127.0.0.1:4173. The certificate is self-signed. The first launch writes it to `data/tls/cert.pem`, and the browser asks before trusting it.
 
 ### npm
 

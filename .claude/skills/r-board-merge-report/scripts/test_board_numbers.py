@@ -268,11 +268,14 @@ class BoardNumbersTest(unittest.TestCase):
         )
         self.assertRegex(mk, r"(?m)^board-numbers: ## \S")
         self.assertIn("scripts/board_numbers.py", mk)
-        for name in ("r-project-setup/project.mk", "r-github-pipeline/sdlc.mk"):
-            text = (ROOT / "skills" / name).read_text(encoding="utf-8")
-            self.assertIn(
-                "-include .claude/skills/r-board-merge-report/merge-report.mk", text
-            )
+        project = (ROOT / "skills/r-project-setup/project.mk").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "-include .claude/skills/r-board-merge-report/merge-report.mk", project
+        )
+        sdlc = (ROOT / "skills/r-github-pipeline/sdlc.mk").read_text(encoding="utf-8")
+        self.assertIn("include $(SDLC_MK_DIR)../r-project-setup/project.mk", sdlc)
         root_makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         self.assertIn(
             "include skills/r-board-merge-report/merge-report.mk", root_makefile

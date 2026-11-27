@@ -1,12 +1,5 @@
----
-name: r-upgrade-node-components
-description: "Gives the Node facts for r-component-upgrade: where each version is pinned, which target changes the lock file, and the known traps. Use with r-component-upgrade when the component is the Node runtime, an npm package, or a Node base image."
----
-
-The general rules in `CLAUDE.md` apply.
-
 <purpose>
-This skill gives the Node facts that `r-component-upgrade` needs. It adds no step.
+This file gives the Node facts that `r-component-upgrade` needs. It adds no step.
 </purpose>
 
 <rules>

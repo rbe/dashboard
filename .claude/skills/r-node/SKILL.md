@@ -31,4 +31,5 @@ This skill names the tools and the Make targets for JavaScript and TypeScript fi
 - `references/tooling.md`: read it before you run `make node-tooling`, when you change `templates/Makefile.node` or `node.mk`, or when the project is a library.
 - `references/coverage.md`: read it when the test runner is not `node --test`, or when `make coverage` or `make test-changed` fails.
 - `references/frameworks.md` and a file named by a framework: read them when `CLAUDE.md` names that framework.
+- `references/upgrade.md`: read it when `r-component-upgrade` updates a component of this language.
 </references>

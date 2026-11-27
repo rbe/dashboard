@@ -4,14 +4,14 @@
 # The project sets
 # IMAGE, PACKAGE, and KEEP_VERSIONS before the include.
 #
-# This file includes the contract targets of r-project-setup (setup, build,
-# test, format, lint, coverage, and the others, from the command
-# variables) and the image targets of container.mk (image, image-ci,
+# This file includes project.mk of r-project-setup once. That file brings
+# the contract targets (setup, build, test, format, lint, coverage, and
+# the others, from the command variables), help, and the optional board
+# fragments. This file then includes the image targets of container.mk (image, image-ci,
 # publish-container). A project on a language makefile of its language
 # skill therefore keeps those targets when it switches from project.mk to
-# this file. A project does not define a contract target again. The Node
-# and Gradle makefiles of this skill set the command variables too. The
-# project owns the targets after the include (publish-*, run, stop).
+# this file. A project does not define a contract target again. The language
+# makefile sets the command variables. The project owns the targets after the include (publish-*, run, stop).
 #
 # GNU Make 3.81, including the macOS system make. Recipes do not use the
 # one-shell option or Make 4 functions. Each recipe is one shell, joined
@@ -78,16 +78,11 @@ ifndef SDLC_MK
 SDLC_MK := 1
 
 SDLC_MK_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
-include $(SDLC_MK_DIR)../r-project-setup/help.mk
-include $(SDLC_MK_DIR)../r-project-setup/podman-python.mk
-include $(SDLC_MK_DIR)../r-project-setup/tools.mk
-include $(SDLC_MK_DIR)../r-project-setup/doctor.mk
-include $(SDLC_MK_DIR)../r-project-setup/skills.mk
-include $(SDLC_MK_DIR)../r-project-setup/old-board.mk
-include $(SDLC_MK_DIR)../r-project-setup/test-changed.mk
-include $(SDLC_MK_DIR)../r-project-setup/check-docs.mk
--include .claude/skills/r-project-report/report.mk
-include $(SDLC_MK_DIR)../r-project-setup/contract.mk
+# The help lead and the two note lines are set before project.mk, which
+# owns the help target. HELP_LEAD and HELP_NOTES are read when help runs.
+HELP_LEAD ?= The Makefile is the interface. A laptop and CI run the same targets.
+HELP_NOTES ?= printf '%s\n' "make ci runs $(SDLC_CI). It does not publish." "Podman is the only container engine."
+include $(SDLC_MK_DIR)../r-project-setup/project.mk
 include $(SDLC_MK_DIR)container.mk
 
 # Recipes call ${MAKE} from the shell. Make does not export this variable
@@ -100,7 +95,6 @@ SDLC_JOBS ?= setup build test docs publish-container
 SDLC_CI ?= setup build editorconfig format lint test integration coverage docs report
 SDLC_KEEP_ARTIFACTS ?= report,docs
 SDLC_ARTIFACT_AGE ?= 3600
-HELP_LEAD ?= The Makefile is the interface. A laptop and CI run the same targets.
 
 # The GitHub CLI runs in a local image. `make gh-image` builds it once:
 # the base image plus the release binary of GH_VERSION. A cleanup
@@ -196,12 +190,6 @@ publish-tags: ## Print tags to push. latest only on the default branch
 	if [ "$$on_default" -eq 1 ]; then printf '%s\n' latest; fi
 
 # help-group: Tools
-help: ## Show the targets. A "Match CI" line is a target the workflow runs
-	@printf '%s\n' "$(HELP_LEAD)"
-	@printf '%s\n' "make ci runs $(SDLC_CI). It does not publish."
-	@printf '%s\n' "Podman is the only container engine."
-	@$(HELP_LIST)
-
 gh-image: ## Build the image of the GitHub CLI, once
 	@set -eu; \
 	if podman image exists "$(GH_IMAGE)"; then exit 0; fi; \
@@ -564,10 +552,8 @@ cleanup-actions-artifacts: ## Match CI: delete artifacts at least one hour old, 
 	printf '# cleanup-actions-artifacts\n\nStatus: %s\nDeleted: %s\n\n%s\n' "$$word" "$$count" "$$reason" > build/summaries/cleanup-actions-artifacts.md; \
 	echo "cleanup-actions-artifacts: $$reason"
 
--include .claude/skills/r-record/index.mk
--include .claude/skills/r-project-report/report.mk
--include .claude/skills/r-migrate-docs/migrate.mk
--include .claude/skills/r-board-merge-report/merge-report.mk
+# The optional fragments (index, report, migrate, merge-report) are
+# included once, by project.mk.
 
 # After the fragments this file includes. A fragment must not replace it.
 .DEFAULT_GOAL := help

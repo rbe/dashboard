@@ -39,7 +39,7 @@ The include is `.claude/skills/r-project-setup/project.mk`. A repository that in
 | `docs` exists when the repository renders docs, and is absent otherwise | | |
 | `login` exists when an image is published, and is absent otherwise | | |
 | `SETUP_CMD`, `BUILD_CMD`, and `TEST_CMD` are non-empty | | |
-| `DOCS_CMD` is non-empty when the repository renders docs | | |
+| A repository that renders docs uses `scripts/render_docs.py` and keeps no renderer | | |
 | Gradle, npm, Podman, python, and tar run inside those targets | | |
 | No `.ONESHELL`, no Make 4 function, no shell-script wrapper. GNU Make 3.81 | | |
 | `setup` runs `make doctor` first and installs no tool on the host | | |

@@ -83,9 +83,6 @@ TEST_CHANGED_CMD = set -eu; \
 	else printf 'test-changed: vitest related %s\n' "$$changed"; $(NODE_RUN) npm exec -- vitest related --run $$changed; fi
 
 RENDER_DOCS = 1
-DOCS_CMD = set -eu; \
-	mkdir -p build/docs build/summaries; \
-	$(NODE_RUN) node scripts/render-docs.mjs --source docs --out build/docs
 PUBLISH_IMAGE = 1
 SDLC_JOBS ?= setup build test docs publish-container
 

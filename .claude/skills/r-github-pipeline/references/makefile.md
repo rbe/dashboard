@@ -24,8 +24,8 @@ The project sets the command variables of `r-project-setup` above the include. I
 | `SDLC_JOBS` | The jobs that the pipeline report lists. Add `publish-github` when that job exists |
 | `SDLC_CI` | The targets that `ci` runs, in order. The default is `setup build editorconfig format lint test integration coverage docs report`. Remove `docs` when there is no docs target |
 | `SDLC_KEEP_ARTIFACTS` | The artifact names that the hourly cleanup does not delete. The default is `report,docs` |
-| `SMOKE_PATH`, `SMOKE_NEEDLE`, `SMOKE_PAGE_NEEDLE` | In `templates/Makefile.node`: the API path and its needle, and the text that the page at `/` must hold. The defaults are `/api/health`, `ok`, and `id="root"`. An empty `SMOKE_PAGE_NEEDLE` turns the page check off |
-| `PORT`, `HOST_PORT` | In `templates/Makefile.node`: the port inside the container, and the port of the host that `make run` binds. `HOST_PORT` stays above 1024 and `run` fails below it |
+| `SMOKE_PATH`, `SMOKE_NEEDLE`, `SMOKE_PAGE_NEEDLE` | In the Node block of `templates/Makefile.image`: the API path and its needle, and the text that the page at `/` must hold. The defaults are `/api/health`, `ok`, and `id="root"`. An empty `SMOKE_PAGE_NEEDLE` turns the page check off |
+| `PORT`, `HOST_PORT` | In the Node block of `templates/Makefile.image`: the port inside the container, and the port of the host that `make run` binds. `HOST_PORT` stays above 1024 and `run` fails below it |
 | `CI_BOARD_FILES` | The board files that `ci-scope` counts. A path that ends in `/` is a directory. The default is `docs/history/ docs/ROADMAP.md docs/proposals/` |
 | `HELP_LEAD` | The first line of `make help` |
 | `GH_BASE_IMAGE`, `GH_VERSION` | The base image and the release of the GitHub CLI image |
@@ -43,7 +43,7 @@ The project sets the command variables of `r-project-setup` above the include. I
 
 | Target | Contract |
 | --- | --- |
-| `help` | The default goal. It lists every target that has a `##` comment, in the groups of `help.mk` in `r-project-setup`. One include is sufficient, because `sdlc.mk` defines `help` |
+| `help` | The default goal. It lists every target that has a `##` comment, in the groups of `help.mk` in `r-project-setup`. One include is sufficient, because `sdlc.mk` includes `project.mk`, which defines `help`. `sdlc.mk` sets `HELP_NOTES` for its two extra lines |
 | `version` | Prints `MAJOR.MINOR.PATCH-run` from `git describe`. `PRINT=tag` prints the `vX.Y.Z` tag. Fails when there is no strict tag, when a pre-release tag is nearer, or when `GITHUB_RUN_NUMBER` is not set |
 | `ci` | Runs `SDLC_CI` in order. Does not publish |
 | `report` | Writes `build/report/index.md` from logs, summaries, and `JOB_RESULT_*` |
@@ -62,7 +62,9 @@ The project sets the command variables of `r-project-setup` above the include. I
 
 ## Targets of container.mk
 
-`container.mk` provides `image`, `image-ci`, and `publish-container` for every project that includes `sdlc.mk`, the Node and Gradle templates included. The project changes them through variables: `IMAGE_BUILD_ARGS`, `SMOKE_CMD`, `CONTAINERFILE`, `IMAGE_CONTEXT`, `IMAGE_PREPARE`, and `PUBLISH_PREPARE`. The Node template sets `SMOKE_CMD` to a curl check of the running image, and its `BUILD_CMD` ends with `make image-ci`. The Gradle template builds the image from the tested JAR: `IMAGE_PREPARE` copies the JAR into `build/image-context`, and `PUBLISH_PREPARE` runs `make image` before the push.
+`container.mk` provides `image`, `image-ci`, and `publish-container` for every project that includes `sdlc.mk`, a Node or Gradle project included. The project changes them through variables: `IMAGE_BUILD_ARGS`, `SMOKE_CMD`, `CONTAINERFILE`, `IMAGE_CONTEXT`, `IMAGE_PREPARE`, and `PUBLISH_PREPARE`. The Node block of `templates/Makefile.image` sets `SMOKE_CMD` to a curl check of the running image, and its `BUILD_CMD` ends with `make image-ci`. The JAR block of `templates/Makefile.image` builds the image from the tested JAR: `IMAGE_PREPARE` copies the JAR into `build/image-context`, and `PUBLISH_PREPARE` runs `make image` before the push.
+
+`image` and `image-ci` build the image of the host platform, and the build job tests it. `publish-container` builds a manifest list for `PLATFORMS`, by default `linux/amd64,linux/arm64`, and pushes it with `podman manifest push --all`. Before that build, `multiarch-host` checks QEMU on a Linux host and installs `MULTIARCH_PACKAGES` with `sudo apt-get` when it is missing. An empty `PLATFORMS` pushes the tested image.
 
 ## Targets that the project defines
 

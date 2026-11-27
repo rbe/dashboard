@@ -410,7 +410,7 @@ class ChangedTestsTest(unittest.TestCase):
         sdlc = (ROOT / "skills" / "r-github-pipeline" / "sdlc.mk").read_text(
             encoding="utf-8"
         )
-        self.assertIn("r-project-setup/test-changed.mk", sdlc)
+        self.assertIn("include $(SDLC_MK_DIR)../r-project-setup/project.mk", sdlc)
         ci_targets = [line for line in sdlc.splitlines() if line.startswith("SDLC_CI")]
         self.assertEqual(len(ci_targets), 1)
         self.assertNotIn("test-changed", ci_targets[0])
@@ -418,7 +418,7 @@ class ChangedTestsTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("A green `test-changed` does not replace `make test`.", develop)
-        for name in ("ci.node.yml", "ci.gradle.yml"):
+        for name in ("ci.yml",):
             workflow = (
                 ROOT / "skills" / "r-github-pipeline" / "templates" / name
             ).read_text(encoding="utf-8")
@@ -755,7 +755,7 @@ def tag_problems(lines):
 class SkillShapeTest(unittest.TestCase):
     def test_each_skill_refers_to_the_general_rules_in_one_line(self):
         """id: R-76"""
-        self.assertEqual(len(skill_files()), 30)
+        self.assertEqual(len(skill_files()), 26)
         for path in skill_files():
             text = path.read_text(encoding="utf-8")
             self.assertEqual(text.count(ONE_LINE), 1, path)
@@ -1269,12 +1269,11 @@ class MakeAndPodmanInterfaceTest(unittest.TestCase):
         self.assertIn("\nsetup: doctor\n", doctor_mk)
         index_mk = (ROOT / "skills/r-record/index.mk").read_text(encoding="utf-8")
         self.assertIn("ifdef DOCTOR_MK\ntoon: doctor\nendif", index_mk)
-        for name in ("project.mk", "../r-github-pipeline/sdlc.mk"):
-            text = (self.SETUP / name).read_text(encoding="utf-8")
-            self.assertLess(text.index("doctor.mk"), text.index("contract.mk"), name)
-            self.assertLess(
-                text.index("doctor.mk"), text.index("record/index.mk"), name
-            )
+        text = (self.SETUP / "project.mk").read_text(encoding="utf-8")
+        self.assertLess(text.index("doctor.mk"), text.index("contract.mk"))
+        self.assertLess(text.index("doctor.mk"), text.index("record/index.mk"))
+        sdlc = (self.PIPELINE / "sdlc.mk").read_text(encoding="utf-8")
+        self.assertIn("include $(SDLC_MK_DIR)../r-project-setup/project.mk", sdlc)
 
     def test_the_podman_machine_starts_behind_a_target(self):
         """id: R-75"""
@@ -1303,7 +1302,7 @@ class MakeAndPodmanInterfaceTest(unittest.TestCase):
         project = (self.SETUP / "project.mk").read_text(encoding="utf-8")
         self.assertIn("include $(PROJECT_MK_DIR)skills.mk", project)
         sdlc = (self.PIPELINE / "sdlc.mk").read_text(encoding="utf-8")
-        self.assertIn("r-project-setup/skills.mk", sdlc)
+        self.assertIn("include $(SDLC_MK_DIR)../r-project-setup/project.mk", sdlc)
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         start = [line for line in readme.splitlines() if "apm install'" in line]
         self.assertEqual(len(start), 1)
@@ -1408,14 +1407,14 @@ class MakeAndPodmanInterfaceTest(unittest.TestCase):
             "- A pin names an exact version. A pin never names `latest`.",
             "- If the update is a major version step, `r-plan` runs first,"
             " because the step can change a rule.",
-            "`r-upgrade-<language>-components`",
+            "`upgrade.md`",
         ):
             self.assertIn(sentence, text)
-        for language in ("node", "python", "java", "go"):
-            name = f"r-upgrade-{language}-components"
-            text = self.skill_text(name)
-            self.assertIn(f"name: {name}\n", text)
-            self.assertIn("r-component-upgrade", text)
+        for language in ("node", "python", "jvm", "go"):
+            text = self.skill_text(f"r-{language}")
+            self.assertIn("references/upgrade.md", text)
+            reference = ROOT / "skills" / f"r-{language}" / "references" / "upgrade.md"
+            self.assertIn("r-component-upgrade", reference.read_text(encoding="utf-8"))
 
     def test_observability_skill_asks_and_checks(self):
         """id: R-102"""
@@ -1534,8 +1533,7 @@ class MakeAndPodmanInterfaceTest(unittest.TestCase):
         self.assertIn("include $(PROJECT_MK_DIR)old-board.mk", project)
         self.assertIn("-include .claude/skills/r-migrate-docs/migrate.mk", project)
         sdlc = (self.PIPELINE / "sdlc.mk").read_text(encoding="utf-8")
-        self.assertIn("r-project-setup/old-board.mk", sdlc)
-        self.assertIn("-include .claude/skills/r-migrate-docs/migrate.mk", sdlc)
+        self.assertIn("include $(SDLC_MK_DIR)../r-project-setup/project.mk", sdlc)
         skill = (ROOT / "skills" / "r-migrate-docs" / "SKILL.md").read_text(
             encoding="utf-8"
         )
@@ -1598,12 +1596,12 @@ class MakeAndPodmanInterfaceTest(unittest.TestCase):
             recipe = sdlc.split("\n" + target + ": ## ")[1].split("\n\n")[0]
             self.assertIn("$(THIS_MAKE) --no-print-directory gh-image", recipe)
             self.assertIn("$(GH) api", recipe)
-        gradle = (self.PIPELINE / "templates" / "Makefile.gradle").read_text(
+        image = (self.PIPELINE / "templates" / "Makefile.image").read_text(
             encoding="utf-8"
         )
-        self.assertEqual(gradle.count("$(GH) release"), 3)
-        self.assertEqual(gradle.count('-R "$(PACKAGE)"'), 3)
-        for name in ("ci.make.yml", "ci.node.yml", "ci.gradle.yml"):
+        self.assertEqual(image.count("$(GH) release"), 3)
+        self.assertEqual(image.count('-R "$(PACKAGE)"'), 3)
+        for name in ("ci.yml",):
             workflow = (self.PIPELINE / "templates" / name).read_text(encoding="utf-8")
             runs = re.findall(r"^\s+(?:- )?run: (.+)$", workflow, re.M)
             self.assertGreater(len(runs), 8)
@@ -1642,18 +1640,28 @@ class MakeAndPodmanInterfaceTest(unittest.TestCase):
             "TEST_CHANGED_CMD",
             "DOCS_CMD",
         )
-        for name in ("Makefile.node", "Makefile.gradle"):
-            text = (self.PIPELINE / "templates" / name).read_text(encoding="utf-8")
-            include = text.index("include .claude/skills/r-github-pipeline/sdlc.mk")
+        for owner, name in (("r-node", "Makefile.node"), ("r-jvm", "Makefile.gradle")):
+            text = (ROOT / "skills" / owner / "templates" / name).read_text(
+                encoding="utf-8"
+            )
+            include = text.index("include .claude/skills/r-project-setup/project.mk")
             for variable in variables:
+                if variable == "DOCS_CMD":
+                    continue
                 match = re.search(rf"(?m)^{variable} = ", text)
                 self.assertIsNotNone(match, f"{name} {variable}")
                 self.assertLess(match.start(), include, f"{name} {variable}")
-            for variable in ("RENDER_DOCS = 1", "PUBLISH_IMAGE = 1"):
-                self.assertLess(text.index(variable), include, f"{name} {variable}")
-            for target in self.CONTRACT_TARGETS:
-                self.assertNotRegex(text, rf"(?m)^{target}:", f"{name} {target}")
-            self.assertNotIn("r-project-setup/project.mk", text)
+        image = (self.PIPELINE / "templates" / "Makefile.image").read_text(
+            encoding="utf-8"
+        )
+        part_two = image.index("# ---- Part 2")
+        self.assertLess(image.index("PUBLISH_IMAGE = 1"), part_two)
+        self.assertIn("RENDER_DOCS = 1", image)
+        self.assertNotIn("DOCS_CMD", image)
+        self.assertNotIn("render-docs", image)
+        for target in self.CONTRACT_TARGETS:
+            self.assertNotRegex(image, rf"(?m)^{target}:", f"image {target}")
+        self.assertNotIn("r-project-setup/project.mk", image)
 
     def test_no_file_of_a_skill_names_the_own_contract_switch(self):
         """id: R-23"""
@@ -1668,16 +1676,17 @@ class MakeAndPodmanInterfaceTest(unittest.TestCase):
 
     def test_the_summary_of_a_pipeline_command_writes_a_hash_as_backslash_hash(self):
         """id: R-71"""
-        for name in ("Makefile.node", "Makefile.gradle"):
-            text = (self.PIPELINE / "templates" / name).read_text(encoding="utf-8")
-            lines = [
-                line
-                for line in text.splitlines()
-                if re.search(r"> build/summaries/(setup|build|test|docs)\.md", line)
-            ]
-            self.assertGreaterEqual(len(lines), 3, name)
-            for line in lines:
-                self.assertIn("printf '\\# ", line, f"{name}: {line}")
+        text = (self.PIPELINE / "templates" / "Makefile.image").read_text(
+            encoding="utf-8"
+        )
+        lines = [
+            line
+            for line in text.splitlines()
+            if re.search(r"> build/summaries/(setup|build|test|docs)\.md", line)
+        ]
+        self.assertGreaterEqual(len(lines), 2)
+        for line in lines:
+            self.assertIn("printf '\\# ", line, line)
 
     def test_the_empty_command_check_of_the_contract_is_made_by_make(self):
         """id: R-71"""
@@ -1685,6 +1694,18 @@ class MakeAndPodmanInterfaceTest(unittest.TestCase):
         for variable in ("SETUP_CMD", "BUILD_CMD", "DOCS_CMD"):
             self.assertIn(f"ifeq ($(strip $({variable})),)", contract)
             self.assertNotIn(f'-z "$({variable})"', contract)
+
+    def test_publish_container_pushes_one_manifest_for_two_platforms(self):
+        """id: R-126"""
+        container = (self.PIPELINE / "container.mk").read_text(encoding="utf-8")
+        self.assertIn("\nPLATFORMS ?= linux/amd64,linux/arm64\n", container)
+        publish = container.split("\n_publish-container:")[1]
+        self.assertIn('--platform "$$platforms" --manifest', publish)
+        self.assertIn("podman manifest push --all", publish)
+        self.assertIn("multiarch-host", publish)
+        self.assertIn('podman push "$(IMAGE):$$tag"', publish)
+        image = container.split("\nimage: ## ")[1].split("\nimage-ci:")[0]
+        self.assertNotIn("--platform", image)
 
     def test_the_image_targets_of_the_pipeline_take_their_context_from_variables(
         self,
@@ -1695,13 +1716,13 @@ class MakeAndPodmanInterfaceTest(unittest.TestCase):
             self.assertRegex(container, rf"(?m)^{variable} \?= ")
         sdlc = (self.PIPELINE / "sdlc.mk").read_text(encoding="utf-8")
         self.assertIn("\ninclude $(SDLC_MK_DIR)container.mk\n", sdlc)
-        self.assertIn("\ninclude $(SDLC_MK_DIR)../r-project-setup/contract.mk\n", sdlc)
-        gradle = (self.PIPELINE / "templates" / "Makefile.gradle").read_text(
+        self.assertIn("\ninclude $(SDLC_MK_DIR)../r-project-setup/project.mk\n", sdlc)
+        gradle = (self.PIPELINE / "templates" / "Makefile.image").read_text(
             encoding="utf-8"
         )
         for variable in ("IMAGE_CONTEXT", "IMAGE_PREPARE", "PUBLISH_PREPARE"):
             self.assertRegex(gradle, rf"(?m)^{variable} = ")
-        node = (self.PIPELINE / "templates" / "Makefile.node").read_text(
+        node = (self.PIPELINE / "templates" / "Makefile.image").read_text(
             encoding="utf-8"
         )
         self.assertIn("image-ci", node.split("\nBUILD_CMD = ")[1].split("\n\n")[0])
@@ -1723,7 +1744,7 @@ class MakeAndPodmanInterfaceTest(unittest.TestCase):
                     host = default.group(1)
                 self.assertGreater(int(host), 1024, f"{path.name}: {match.group(0)}")
         self.assertGreaterEqual(found, 1)
-        node = (self.PIPELINE / "templates" / "Makefile.node").read_text(
+        node = (self.PIPELINE / "templates" / "Makefile.image").read_text(
             encoding="utf-8"
         )
         self.assertIn("-p 127.0.0.1:$(HOST_PORT):$(PORT)", node)
@@ -1740,7 +1761,6 @@ class MakeAndPodmanInterfaceTest(unittest.TestCase):
         """id: R-116"""
         templates = {
             "r-jvm": ROOT / "skills" / "r-jvm" / "templates" / "Makefile.gradle",
-            "r-github-pipeline": self.PIPELINE / "templates" / "Makefile.gradle",
         }
         jvm = (ROOT / "skills" / "r-jvm" / "jvm.mk").read_text(encoding="utf-8")
         self.assertRegex(jvm, r"(?m)^PODMAN_SOCKET \?= ")
@@ -1831,7 +1851,7 @@ class MakeAndPodmanInterfaceTest(unittest.TestCase):
 
     def test_the_web_smoke_check_looks_for_the_page_root_and_the_api_needle(self):
         """id: R-119"""
-        node = (self.PIPELINE / "templates" / "Makefile.node").read_text(
+        node = (self.PIPELINE / "templates" / "Makefile.image").read_text(
             encoding="utf-8"
         )
         self.assertRegex(node, r'(?m)^SMOKE_PAGE_NEEDLE \?= id="root"$')
@@ -1877,7 +1897,7 @@ class MakeAndPodmanInterfaceTest(unittest.TestCase):
             " format('refs/heads/{0}', github.event.repository.default_branch)"
             " && vars.AUTO_PUBLISH == 'true') ||"
         )
-        counts = {"ci.node.yml": 1, "ci.make.yml": 1, "ci.gradle.yml": 2}
+        counts = {"ci.yml": 2}
         for name, count in counts.items():
             workflow = (self.PIPELINE / "templates" / name).read_text(encoding="utf-8")
             jobs = re.findall(
@@ -1902,7 +1922,7 @@ class MakeAndPodmanInterfaceTest(unittest.TestCase):
         self.assertNotIn("AUTO_PUBLISH", sdlc + container)
         ci = re.search(r"(?m)^SDLC_CI \?= (.+)$", sdlc).group(1)
         self.assertNotIn("publish", ci)
-        for name in ("Makefile.node", "Makefile.gradle", "Makefile.image"):
+        for name in ("Makefile.image",):
             text = (self.PIPELINE / "templates" / name).read_text(encoding="utf-8")
             for line in re.findall(r"(?m)^SDLC_CI \??= (.+)$", text):
                 self.assertNotIn("publish", line, name)
@@ -2288,7 +2308,7 @@ class CiScopeRecipeTest(unittest.TestCase):
 
     def test_the_workflow_templates_skip_the_jobs_only_on_a_push(self):
         """id: R-123"""
-        for name in ("ci.make.yml", "ci.node.yml", "ci.gradle.yml"):
+        for name in ("ci.yml",):
             workflow = (ROOT / "skills/r-github-pipeline/templates" / name).read_text(
                 encoding="utf-8"
             )
@@ -2516,6 +2536,7 @@ HELP_GROUP_OF = {
     "image-ci": "Delivery",
     "publish-container": "Delivery",
     "publish-github": "Delivery",
+    "multiarch-host": "Delivery",
     "ci-status": "Delivery",
     "ci-scope": "Delivery",
     "pull-request": "Delivery",
@@ -2743,16 +2764,16 @@ class HelpGroupsTest(unittest.TestCase):
         project = (self.SETUP / "project.mk").read_text(encoding="utf-8")
         sdlc = (self.PIPELINE / "sdlc.mk").read_text(encoding="utf-8")
         self.assertIn("\ninclude $(PROJECT_MK_DIR)help.mk\n", project)
-        self.assertIn("\ninclude $(SDLC_MK_DIR)../r-project-setup/help.mk\n", sdlc)
-        for name, text in (("project.mk", project), ("sdlc.mk", sdlc)):
-            recipe = text.split("\nhelp: ## ")[1].split("\n\n")[0]
-            self.assertIn("\t@$(HELP_LIST)", recipe, name)
-            self.assertNotIn("awk", recipe, name)
-            self.assertIn("@printf '%s\\n' \"$(HELP_LEAD)\"", recipe, name)
-        self.assertIn(
-            "make ci runs $(SDLC_CI). It does not publish.",
-            sdlc.split("\nhelp: ## ")[1].split("\n\n")[0],
-        )
+        self.assertIn("\ninclude $(SDLC_MK_DIR)../r-project-setup/project.mk\n", sdlc)
+        self.assertNotIn("\nhelp: ## ", sdlc)
+        recipe = project.split("\nhelp: ## ")[1].split("\n\n")[0]
+        self.assertIn("\t@$(HELP_LIST)", recipe)
+        self.assertNotIn("awk", recipe)
+        self.assertIn("@printf '%s\\n' \"$(HELP_LEAD)\"", recipe)
+        self.assertIn("\t@$(HELP_NOTES)", recipe)
+        notes = [line for line in sdlc.splitlines() if line.startswith("HELP_NOTES ?=")]
+        self.assertEqual(len(notes), 1)
+        self.assertIn("make ci runs $(SDLC_CI). It does not publish.", notes[0])
         help_mk = HELP_MK.read_text(encoding="utf-8")
         self.assertIn("\nifndef HELP_MK\nHELP_MK := 1\n", help_mk)
         self.assertIn("\nHELP_GROUPS ?= Gates Project Board Delivery Tools\n", help_mk)
@@ -2821,16 +2842,6 @@ LANGUAGE_TEMPLATES = (
     ),
     ("r-go/templates/Makefile.golang", "r-go/go.mk", "r-project-setup/project.mk"),
     ("r-jvm/templates/Makefile.gradle", "r-jvm/jvm.mk", "r-project-setup/project.mk"),
-    (
-        "r-github-pipeline/templates/Makefile.node",
-        "r-node/node.mk",
-        "r-github-pipeline/sdlc.mk",
-    ),
-    (
-        "r-github-pipeline/templates/Makefile.gradle",
-        "r-jvm/jvm.mk",
-        "r-github-pipeline/sdlc.mk",
-    ),
 )
 
 
@@ -2874,14 +2885,13 @@ class LanguageIncludeFileTest(unittest.TestCase):
 
     def test_the_pipeline_node_template_gives_node_mk_the_image_it_needs(self):
         """id: R-122"""
-        template = self.read("r-github-pipeline/templates/Makefile.node")
+        template = self.read("r-github-pipeline/templates/Makefile.image")
         node = self.read("r-node/node.mk")
         self.assertRegex(node, r"(?m)^NODE \?= podman run .*\\$")
         self.assertIn("$(NODE_IMAGE)", node.split("\nNODE ?= ")[1].split("\n\n")[0])
-        self.assertLess(
-            template.index("\nNODE_IMAGE ?= "),
-            template.index("\ninclude .claude/skills/r-node/node.mk\n"),
-        )
+        self.assertRegex(node, r"(?m)^NODE_VERSION \?= ")
+        self.assertIn("$(NODE_VERSION)", template)
+        self.assertNotRegex(template, r"(?m)^NODE_VERSION \??= ")
 
     def test_a_language_file_defines_its_targets_and_its_defaults_with_the_marker(
         self,
