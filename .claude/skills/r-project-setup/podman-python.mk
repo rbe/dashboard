@@ -18,10 +18,20 @@ PYTHON_GID := $(shell id -g)
 # this stays empty.
 PYTHON_USERNS := $(shell [ "$$(uname -s)" = Linux ] && [ "$$(podman info --format '{{.Host.Security.Rootless}}' 2>/dev/null)" = true ] && echo --userns=keep-id)
 
+# TOOLS says where Make runs a tool. podman, the default, runs each tool
+# in its image. host runs the same tool from the PATH of this machine,
+# for a machine without Podman, such as a cloud session. tools.mk has the
+# other tools of host mode and the target host-tools.
+TOOLS ?= podman
+
+ifeq ($(TOOLS),host)
+PYTHON = env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$(CURDIR)/src" python3
+else
 PYTHON = podman run --rm $(PYTHON_USERNS) --user $(PYTHON_UID):$(PYTHON_GID) \
 	-e PYTHONDONTWRITEBYTECODE=1 -e PYTHONPATH=/work/src \
 	-v "$(CURDIR)":/work:Z -w /work \
 	$(PYTHON_IMAGE) python3
+endif
 
 .PHONY: py
 

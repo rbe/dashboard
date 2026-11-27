@@ -72,7 +72,7 @@
 #                    the merge base with origin/DEFAULT_BRANCH.
 #   CI_BOARD_FILES   the board files that ci-scope counts. A path that
 #                    ends in / is a directory. The default is the files
-#                    that the close of a task changes.
+#                    that the close of a task changes: BOARD_FILES of tools.mk.
 
 ifndef SDLC_MK
 SDLC_MK := 1
@@ -107,8 +107,13 @@ GH_IMAGE ?= localhost/sdlc-gh:$(GH_VERSION)
 GH_REPO ?= $(OWNER)/$(NAME)
 CI_WAIT_SECONDS ?= 15
 CI_WAIT_TRIES ?= 240
-CI_BOARD_FILES ?= docs/history/ docs/ROADMAP.md docs/proposals/
+CI_BOARD_FILES ?= $(BOARD_FILES)
 GH = podman run --rm -e GH_TOKEN -e GITHUB_TOKEN -e GH_HOST -e GITHUB_RUN_ID -e SDLC_ARTIFACT_AGE -e SDLC_KEEP_ARTIFACTS $(PODMAN_NET_ARGS) -v "$(CURDIR)":/work:Z -w /work $(GH_IMAGE)
+# Host mode (TOOLS=host of r-project-setup): gh runs from PATH, and
+# gh-image builds nothing.
+ifeq ($(TOOLS),host)
+GH = gh
+endif
 
 # Nearest ancestor tag whose name starts with v and a digit. Empty when
 # none exists. version rejects anything that is not vMAJOR.MINOR.PATCH.
@@ -190,6 +195,7 @@ publish-tags: ## Print tags to push. latest only on the default branch
 # help-group: Tools
 gh-image: ## Build the image of the GitHub CLI, once
 	@set -eu; \
+	if [ "$(TOOLS)" = host ]; then exit 0; fi; \
 	if podman image exists "$(GH_IMAGE)"; then exit 0; fi; \
 	printf '%s\n' \
 	  'FROM $(GH_BASE_IMAGE)' \
@@ -311,14 +317,23 @@ check-tag: ## Fail when TAG is not a new vMAJOR.MINOR.PATCH at the tip of the de
 	if [ -z "$$tag" ]; then echo "check-tag: set TAG=vMAJOR.MINOR.PATCH." >&2; exit 1; fi; \
 	printf '%s\n' "$$tag" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$$' \
 	  || { echo "check-tag: '$$tag' is not vMAJOR.MINOR.PATCH." >&2; exit 1; }; \
+	pushed="$${PUSHED:-}"; \
 	strict=$$(git tag -l 'v[0-9]*' | grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$$' || true); \
-	if printf '%s\n' "$$strict" | grep -qx "$$tag"; then echo "check-tag: the tag $$tag exists." >&2; exit 1; fi; \
+	if printf '%s\n' "$$strict" | grep -qx "$$tag"; then \
+	  if [ -z "$$pushed" ] || [ "$$(git rev-parse "$$tag^{commit}")" != "$$(git rev-parse "$$pushed^{commit}")" ]; then echo "check-tag: the tag $$tag exists." >&2; exit 1; fi; \
+	fi; \
 	newest=$$(printf '%s\n%s\n' "$$strict" "$$tag" | grep . | sed 's/^v//' | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1); \
 	if [ "v$$newest" != "$$tag" ]; then echo "check-tag: $$tag is not newer than v$$newest." >&2; exit 1; fi; \
-	branch=$$(git rev-parse --abbrev-ref HEAD); \
 	tip=$$(git rev-parse -q --verify "origin/$(DEFAULT_BRANCH)" || git rev-parse -q --verify "$(DEFAULT_BRANCH)" || true); \
-	if [ "$$branch" != "$(DEFAULT_BRANCH)" ] || [ -z "$$tip" ] || [ "$$(git rev-parse HEAD)" != "$$tip" ]; then \
-	  echo "check-tag: check out the tip of $(DEFAULT_BRANCH) before the tag. HEAD is on '$$branch'." >&2; exit 1; \
+	if [ -n "$$pushed" ]; then \
+	  if [ -z "$$tip" ] || [ "$$(git rev-parse "$$pushed^{commit}")" != "$$tip" ]; then \
+	    echo "check-tag: the tag $$tag does not point to the tip of $(DEFAULT_BRANCH)." >&2; exit 1; \
+	  fi; \
+	else \
+	  branch=$$(git rev-parse --abbrev-ref HEAD); \
+	  if [ "$$branch" != "$(DEFAULT_BRANCH)" ] || [ -z "$$tip" ] || [ "$$(git rev-parse HEAD)" != "$$tip" ]; then \
+	    echo "check-tag: check out the tip of $(DEFAULT_BRANCH) before the tag. HEAD is on '$$branch'." >&2; exit 1; \
+	  fi; \
 	fi; \
 	printf '%s\n' "check-tag: $$tag is a new tag at the tip of $(DEFAULT_BRANCH)."
 

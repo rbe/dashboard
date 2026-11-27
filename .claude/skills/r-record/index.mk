@@ -40,7 +40,7 @@ ifndef PYTHON
 include $(RECORD_DIR)../r-project-setup/podman-python.mk
 endif
 
-.PHONY: toon ids id id-raise req links links-check
+.PHONY: toon ids id id-raise req links links-check board-check
 
 # help-group: Board
 toon: ## Write the ADR or requirements index, and the skill index
@@ -78,6 +78,14 @@ links: ## Write a link for each id in the documents under docs/
 
 links-check: ## Fail when an id in a document is not a link
 	$(PYTHON) "$(RECORD_DIR)scripts/links.py" check
+
+# The board checks in one target. make test runs it, so the gates and CI
+# fail on a repeated id, an id above its counter, and an id that is not a
+# link. report.mk of r-project-report adds test-ids, the test-id check.
+# help-group: Board
+board-check: ids links-check ## Fail on a bad id, an id that is no link, or a test with no id
+
+test: board-check
 
 setup: toon
 

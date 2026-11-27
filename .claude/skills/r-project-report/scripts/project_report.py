@@ -312,15 +312,17 @@ def build(root: Path) -> tuple[str, list[str]]:
     return text, requirements_module.problems(requirements, proofs_found)
 
 
-def main() -> int:
+def main(argv: list[str]) -> int:
+    """Write the report, or with --check only the problems, to stderr."""
     requirements_module = sibling("requirements")
     root = requirements_module.repo_root(Path.cwd())
     text, errors = build(root)
-    sys.stdout.write(text)
+    if "--check" not in argv:
+        sys.stdout.write(text)
     for error in errors:
         print(error, file=sys.stderr)
     return 1 if errors else 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

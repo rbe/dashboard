@@ -37,6 +37,11 @@ NODE_DEV_TOOLS ?= prettier eslint @eslint/js globals
 NODE ?= podman run --rm $(PYTHON_USERNS) --user $(PYTHON_UID):$(PYTHON_GID) -e HOME=/tmp -e CI \
 	-e NODE_V8_COVERAGE -e npm_config_cache=/tmp/npm-cache \
 	-e npm_config_update_notifier=false -v "$(CURDIR)":/work:Z -w /work $(NODE_IMAGE)
+# Host mode (TOOLS=host of podman-python.mk): node and npm run from PATH.
+# It replaces a NODE that the project set before the include.
+ifeq ($(TOOLS),host)
+NODE = env npm_config_update_notifier=false
+endif
 
 .PHONY: npm
 .PHONY: node-tooling

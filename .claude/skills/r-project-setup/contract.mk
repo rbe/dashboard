@@ -122,7 +122,8 @@ endif
 
 # The six gates in order. Only when all pass, the stamp build/gates.ok
 # gets the tree id of the working tree (scripts/tree-hash.sh). The pre-push
-# hook compares that id, so an edit after the gates makes the push fail.
+# hook compares that id with the tree of the pushed commit, so a commit
+# that differs from the checked content, other than in BOARD_FILES, fails.
 # The first failing gate stops the recipe and leaves no stamp.
 # help-group: Gates
 gates: ## Run the six gates, then stamp the working tree
@@ -141,10 +142,12 @@ gates: ## Run the six gates, then stamp the working tree
 gates-check: ## Check that make gates passed after the last edit
 	@sh $(CONTRACT_DIR)/scripts/gates-stamp.sh check || { printf '%s\n' "gates-check: build/gates.ok is missing or stale. Run make gates." >&2; exit 1; }
 
-# Writes .git/hooks/pre-push, which runs scripts/pre-push.sh. It replaces
-# a hook that carries the marker line, and prints and skips any other
-# hook, so it never overwrites a hook of the project in silence.
-# setup runs it. Outside a git work tree it does nothing.
+# Writes .git/hooks/pre-push, which runs scripts/pre-push.sh with the
+# BOARD_FILES of tools.mk. It replaces a hook that carries the marker line,
+# and prints and skips any other hook, so it never overwrites a hook of the
+# project in silence. setup, gates, and test-changed run it, so the first
+# gate run of any agent installs the hook in a fresh clone. It writes only
+# when the content changes. Outside a git work tree it does nothing.
 # help-group: Gates
 git-hooks: ## Install the pre-push hook that checks build/gates.ok
 	@set -eu; \
@@ -154,12 +157,16 @@ git-hooks: ## Install the pre-push hook that checks build/gates.ok
 	if [ -e "$$hook" ] && ! grep -q "$$marker" "$$hook"; then \
 	  printf '%s\n' "git-hooks: $$hook exists and is not from r-project-setup. Skipped. Add: sh $(CONTRACT_DIR)/scripts/pre-push.sh"; exit 0; \
 	fi; \
+	content=$$(printf '#!/bin/sh\n%s\nBOARD_FILES="%s"\nexport BOARD_FILES\nexec sh "$$(git rev-parse --show-toplevel)/$(CONTRACT_DIR)/scripts/pre-push.sh" "$$@"' "$$marker" "$(BOARD_FILES)"); \
+	if [ -f "$$hook" ] && [ "$$(cat "$$hook")" = "$$content" ]; then exit 0; fi; \
 	mkdir -p "$$(dirname "$$hook")"; \
-	printf '#!/bin/sh\n%s\nexec sh "$$(git rev-parse --show-toplevel)/$(CONTRACT_DIR)/scripts/pre-push.sh" "$$@"\n' "$$marker" > "$$hook"; \
+	printf '%s\n' "$$content" > "$$hook"; \
 	chmod +x "$$hook"; \
 	printf '%s\n' "git-hooks: installed $$hook"
 
 setup: git-hooks
+gates: git-hooks
+test-changed: git-hooks
 
 # Generated. Hand-editing build/project-report.md is a defect.
 # report.mk in the r-project-report skill owns this target when that skill

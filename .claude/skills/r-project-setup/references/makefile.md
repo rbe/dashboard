@@ -22,7 +22,9 @@ Make reads `RENDER_DOCS` and `PUBLISH_IMAGE` while it parses `project.mk`. Set t
 
 | Target | When | What it does |
 | --- | --- | --- |
-| `doctor` | Always | Checks that this machine has Make, Git, and Podman |
+| `doctor` | Always | Checks that this machine has Make, Git, and Podman. With `TOOLS=host`, it checks `python3` in place of Podman |
+| `host-tools` | Always | Installs the pinned tools of host mode into `build/host-tools`: ruff, coverage, diff-cover, and APM with `pip` into a venv, and editorconfig-checker with `go install`. With `TOOLS=host`, `setup` runs it |
+| `git-hooks` | Always | Installs the git hook `pre-push`. `setup`, `gates`, and `test-changed` run it |
 | `podman-start` | Always | Starts the Podman machine on macOS, and creates it when none exists |
 | `setup` | Always | Runs `doctor` first, then `toon` when `r-record` is installed, then `SETUP_CMD`. A failed `doctor` stops `setup` |
 | `build` | Always | Produces the artifact. The Gradle build runs here |
@@ -77,6 +79,11 @@ Make reads `RENDER_DOCS` and `PUBLISH_IMAGE` while it parses `project.mk`. Set t
 | `APM_VERSION` | The APM version of `skills-install` and `skills-update`. Default `0.36.1` |
 | `DIFF_COVER_IMAGE` | The image that runs diff-cover. It has git and Python. Default `docker.io/library/python:3.13` |
 | `PODMAN_NET_ARGS` | Extra `podman` arguments of a container that reads the network (APM, the GitHub CLI, and the `pip` runs of diff-cover and coverage), such as a CA mount behind a proxy |
+| `TOOLS` | Where Make runs a tool. `podman`, the default, runs it in its image. `host` runs it from `PATH`, with `build/host-tools/bin` first, for a machine without Podman, such as a cloud session. The image targets still need Podman |
+| `HOST_TOOLS_DIR` | Where `host-tools` installs. Default `build/host-tools` |
+| `RUFF` | Runs ruff, the formatter and linter of Python. A Python project uses it in `FORMAT_CMD` and `LINT_CMD` |
+| `COVERAGE_PYTHON` | Runs a Python script with the package coverage. A Python project uses it in `COVERAGE_CMD` |
+| `BOARD_FILES` | The files that the close of a task changes. The pre-push hook accepts a commit that differs from `build/gates.ok` only in these files. Default `docs/history/ docs/ROADMAP.md docs/proposals/` |
 
 The language skill names the tool of `FORMAT_CMD`, `LINT_CMD`, `COVERAGE_CMD`, and `TEST_CHANGED_CMD`. `r-project-report` ships the test selection for Python, Node, and the JVM.
 
@@ -93,7 +100,7 @@ The language skill names the tool of `FORMAT_CMD`, `LINT_CMD`, `COVERAGE_CMD`, a
 | `test-changed.mk` | `test-changed` |
 | `check-docs.mk` | `check-docs` |
 | `podman-python.mk` | `$(PYTHON)` and `py` |
-| `tools.mk` | The images and versions of editorconfig-checker, diff-cover, and APM |
+| `tools.mk` | The images and versions of editorconfig-checker, ruff, coverage, diff-cover, and APM, the host forms of these tools, `BOARD_FILES`, and `host-tools` |
 
 The `sdlc.mk` of `r-github-pipeline` includes the same `contract.mk`, `doctor.mk`, `skills.mk`, `old-board.mk`, `test-changed.mk`, and `check-docs.mk`. The targets stay when a project changes from `project.mk` to `sdlc.mk`. A repository on `sdlc.mk` defines its own project targets.
 
