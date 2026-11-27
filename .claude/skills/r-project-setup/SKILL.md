@@ -67,6 +67,7 @@ This skill owns the Make contract: the Makefile, the standard targets, `CLAUDE.m
 - The project includes the installed `project.mk`. Do not keep a copy at the repository root or elsewhere.
 - If the Makefile lacks the include of `project.mk` or `sdlc.mk`, run `make -f .claude/skills/<skill>/<file>.mk <target>`.
 - Podman: `make build` and `make test` call Podman. `make run` exists only where a language template defines it. A recipe calls `git`, `podman`, and the tools of POSIX `sh`, such as `sed`, `awk`, `grep`, `find`, and `tar`. `setup` runs `make doctor`, then `SETUP_CMD`.
+- Host mode: with `TOOLS=host`, each command variable runs its tool from `PATH` in place of Podman. `make host-tools` installs the pinned shared tools. A command variable of a project uses `$(PYTHON)`, `$(RUFF)`, `$(COVERAGE_PYTHON)`, `$(NODE)`, `$(GO)`, or `$(GRADLE_RUN)`, not a literal `podman run`, so host mode reaches it.
 - Make 3.81 recipes: the system `make` stays GNU Make 3.81, also on macOS. Use no `.ONESHELL` and no Make 4 function (`$(file ...)`, `$(guile ...)`, `!=`). Each recipe line is one POSIX shell, joined with backslashes. A shell `$` is `$$`. The recipe is the command; add no shell-script wrapper.
 </rules>
 

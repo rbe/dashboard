@@ -23,7 +23,16 @@ ifeq ($(strip $(PROJECT_REPORT_CMD)),)
 PROJECT_REPORT_CMD = $(PYTHON) "$(PROJECT_REPORT_DIR)scripts/project_report.py"
 endif
 
-.PHONY: project-report
+.PHONY: project-report test-ids
+
+# The same reader as project-report, without the report: it fails when a
+# test has no id: line or names an id that is no requirement or ADR.
+# board-check of r-record runs it, so make test runs it.
+# help-group: Board
+test-ids: ## Fail when a test has no id, or names an id that is no rule
+	$(PROJECT_REPORT_CMD) --check
+
+board-check: test-ids
 
 # Generated. Hand-editing build/project-report.md is a defect.
 # help-group: Board

@@ -47,6 +47,12 @@ NODE_DEPS = if [ ! -d node_modules ]; then \
 	  else $(NODE_RUN) npm ci; fi; \
 	fi
 
+# Host mode (TOOLS=host of r-project-setup): npm runs from PATH, for a
+# machine without Podman, such as a cloud session.
+ifeq ($(TOOLS),host)
+NODE_RUN = $(NODE)
+endif
+
 # The command variables of the contract. A # inside one is written \#.
 SETUP_CMD = set -eu; \
 	mkdir -p build/deps build/summaries; \

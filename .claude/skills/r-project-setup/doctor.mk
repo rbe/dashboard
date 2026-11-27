@@ -11,7 +11,8 @@
 #   origin  a remote named origin, when the project has a workflow
 #
 # Make, Git, and Podman are the only tools the host needs. Every other
-# tool runs in a Podman image behind a target.
+# tool runs in a Podman image behind a target. With TOOLS=host, doctor
+# checks python3 in place of Podman, as podman-python.mk says.
 #
 # A project whose Makefile has no include yet runs
 #   make -f .claude/skills/r-project-setup/doctor.mk doctor
@@ -40,9 +41,13 @@ doctor: ## Check that this machine has the tools the targets need
 	fi; \
 	if git --version >/dev/null 2>&1; then ok "$$(git --version)"; \
 	else bad "git does not run" "Install Git. On macOS: xcode-select --install"; fi; \
-	if ! command -v podman >/dev/null 2>&1; then \
+	if [ "$(TOOLS)" = host ]; then \
+	  ok "TOOLS=host: the shared tools run from PATH, so the gates need no Podman"; \
+	  if command -v python3 >/dev/null 2>&1; then ok "$$(python3 --version)"; \
+	  else bad "python3 is not on PATH" "Install Python 3, or run without TOOLS=host."; fi; \
+	elif ! command -v podman >/dev/null 2>&1; then \
 	  if [ "$$os" = "Darwin" ]; then hint="Install Podman from podman.io, then run make podman-start."; \
-	  else hint="Install Podman with the package manager of this system."; fi; \
+	  else hint="Install Podman with the package manager of this system. Without Podman, set TOOLS=host and run make setup."; fi; \
 	  bad "podman is not on PATH" "$$hint"; \
 	elif podman info >/dev/null 2>&1; then \
 	  ok "podman runs"; \

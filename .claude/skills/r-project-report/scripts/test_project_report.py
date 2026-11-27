@@ -7,6 +7,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -98,6 +99,35 @@ class RequirementIdTest(unittest.TestCase):
                 requirements.collect(root), requirements.proofs(root)
             )
             self.assertTrue(any("not a requirement" in error for error in errors))
+
+    def test_make_test_runs_the_check_of_the_test_ids(self):
+        """id: R-130"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            subprocess.run(["git", "init", "-q", tmp], check=True)
+            write(
+                root,
+                "docs/adr/ADR-0001.md",
+                "---\nid: ADR-0001\ntitle: One\nstatus: Accepted\n---\n",
+            )
+            write(root, "tests/test_sample.py", "def test_runs():\n    assert True\n")
+            result = subprocess.run(
+                [sys.executable, str(Path(project_report.__file__)), "--check"],
+                cwd=tmp,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.stdout, "")
+            self.assertIn("has no id", result.stderr)
+        report = (ROOT / "skills" / "r-project-report" / "report.mk").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("\t$(PROJECT_REPORT_CMD) --check\n", report)
+        self.assertIn("\nboard-check: test-ids\n", report)
+        index = (ROOT / "skills" / "r-record" / "index.mk").read_text(encoding="utf-8")
+        self.assertIn("\nboard-check: ids links-check ##", index)
+        self.assertIn("\ntest: board-check\n", index)
 
     def test_review_fails_a_test_that_has_no_id(self):
         """id: R-1"""
@@ -1234,7 +1264,12 @@ class MakeAndPodmanInterfaceTest(unittest.TestCase):
         found = []
         for path in self.makefiles():
             found += host_calls(path)
-        self.assertEqual(found, [])
+        # host-tools is the one recipe that calls host tools: it installs
+        # the tools of host mode (TOOLS=host) with python3 and go.
+        tools = (self.SETUP / "tools.mk").read_text(encoding="utf-8")
+        recipe = tools.split("\nhost-tools: ## ", 1)[1].split("\n\n", 1)[0]
+        allowed = {f"tools.mk: {line.strip()}" for line in recipe.splitlines()}
+        self.assertEqual([line for line in found if line not in allowed], [])
 
     def test_the_host_call_check_finds_a_host_tool(self):
         """id: R-75"""
@@ -1261,7 +1296,9 @@ class MakeAndPodmanInterfaceTest(unittest.TestCase):
         for tool in ("$(MAKE) --version", "git --version", "podman info"):
             self.assertIn(tool, doctor)
         self.assertIn("git remote get-url origin", doctor)
-        self.assertEqual(re.findall(r"command -v (\w+)", doctor), ["podman"])
+        # With TOOLS=host, doctor checks python3 in place of Podman.
+        self.assertEqual(re.findall(r"command -v (\w+)", doctor), ["python3", "podman"])
+        self.assertIn('if [ "$(TOOLS)" = host ]; then', doctor)
         for name in ("doctor.mk", "contract.mk", "tools.mk", "project.mk"):
             text = (self.SETUP / name).read_text(encoding="utf-8")
             self.assertNotIn("brew", text.lower())
@@ -1797,13 +1834,15 @@ class MakeAndPodmanInterfaceTest(unittest.TestCase):
                 f"include {jvm}\nshow:\n\t@echo '$(GRADLE_RUN)'\n", encoding="utf-8"
             )
             run = ["make", "--no-print-directory", "-f", str(makefile), "show"]
+            env = {k: v for k, v in os.environ.items() if k != "TOOLS"}
             plain = subprocess.run(
-                run, cwd=tmp, capture_output=True, text=True, check=True
+                run, cwd=tmp, env=env, capture_output=True, text=True, check=True
             ).stdout
             mirror = "https://mirror.invalid/maven2/"
             mirrored = subprocess.run(
                 [*run, f"MAVEN_MIRROR={mirror}"],
                 cwd=tmp,
+                env=env,
                 capture_output=True,
                 text=True,
                 check=True,
@@ -2155,6 +2194,8 @@ case "$*" in
     "rev-parse --abbrev-ref HEAD") cat branch.txt ;;
     "rev-parse HEAD") cat head.txt ;;
     "rev-parse -q --verify origin/main") cat tip.txt 2>/dev/null || exit 1 ;;
+    "rev-parse v"*"^{commit}") cat tagcommit.txt ;;
+    "rev-parse "*"^{commit}") printf '%s\n' "$2" | sed 's/[\\^]{commit}$//' ;;
     *) exit 1 ;;
 esac
 """
@@ -2163,7 +2204,16 @@ esac
 class CheckTagRecipeTest(unittest.TestCase):
     """Runs the real check-tag recipe of sdlc.mk in sh against a fake git."""
 
-    def check(self, tag, tags=("v0.3.0", "v0.4.0"), branch="main", head="a1", tip="a1"):
+    def check(
+        self,
+        tag,
+        tags=("v0.3.0", "v0.4.0"),
+        branch="main",
+        head="a1",
+        tip="a1",
+        pushed=None,
+        tag_commit="a1",
+    ):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "bin").mkdir()
@@ -2174,8 +2224,11 @@ class CheckTagRecipeTest(unittest.TestCase):
             (root / "head.txt").write_text(head + "\n")
             if tip:
                 (root / "tip.txt").write_text(tip + "\n")
+            (root / "tagcommit.txt").write_text(tag_commit + "\n")
             shell = expand_make_recipe("check-tag", {"DEFAULT_BRANCH": "main"})
             environment = {"PATH": f"{root / 'bin'}:{os.environ['PATH']}"}
+            if pushed is not None:
+                environment["PUSHED"] = pushed
             if tag is not None:
                 environment["TAG"] = tag
             return subprocess.run(
@@ -2222,6 +2275,19 @@ class CheckTagRecipeTest(unittest.TestCase):
             result = self.check("v0.5.0", **kwargs)
             self.assertNotEqual(result.returncode, 0, str(kwargs))
             self.assertIn("check out the tip of main", result.stderr)
+
+    def test_a_pushed_tag_may_exist_at_the_pushed_commit_on_the_tip(self):
+        """id: R-120"""
+        tags = ("v0.3.0", "v0.4.0", "v0.5.0")
+        result = self.check("v0.5.0", tags=tags, branch="feature", pushed="a1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        result = self.check("v0.5.0", tags=tags, pushed="b2", tag_commit="b2")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("does not point to the tip of main", result.stderr)
+        result = self.check("v0.5.0", tags=tags, pushed="a1", tag_commit="c3")
+        self.assertIn("exists", result.stderr)
+        result = self.check("v0.3.5", tags=tags, pushed="a1")
+        self.assertIn("is not newer than v0.5.0", result.stderr)
 
     def test_the_skill_and_the_reference_name_the_target(self):
         """id: R-120"""
@@ -2562,6 +2628,8 @@ HELP_GROUP_OF = {
     "req": "Board",
     "links": "Board",
     "links-check": "Board",
+    "board-check": "Board",
+    "test-ids": "Board",
     "version": "Delivery",
     "check-tag": "Delivery",
     "publish-tags": "Delivery",
@@ -2583,6 +2651,7 @@ HELP_GROUP_OF = {
     "py": "Tools",
     "doctor": "Tools",
     "podman-start": "Tools",
+    "host-tools": "Tools",
     "skills-install": "Tools",
     "skills-update": "Tools",
     "apm": "Tools",
@@ -2942,12 +3011,18 @@ class LanguageIncludeFileTest(unittest.TestCase):
             for target, group in found:
                 self.assertEqual(group, "Tools", f"{language} {target}")
                 self.assertIn(target, phony, f"{language} {target}")
+            # Host mode replaces a value of the project on purpose.
+            outside_host_mode = re.sub(
+                r"(?ms)^ifeq \(\$\(TOOLS\),host\)\n.*?^endif\n", "", text
+            )
             for variable in spec["variables"]:
                 self.assertRegex(
                     text, rf"(?m)^{variable} \?= ", f"{language} {variable}"
                 )
                 self.assertNotRegex(
-                    text, rf"(?m)^{variable} = ", f"{language} {variable}"
+                    outside_host_mode,
+                    rf"(?m)^{variable} = ",
+                    f"{language} {variable}",
                 )
             self.assertTrue(text.endswith(".DEFAULT_GOAL := help\n\nendif\n"), language)
 
