@@ -24,6 +24,19 @@ The general rules in `CLAUDE.md` apply.
 12. Ask `r-record` to write the Review section. The section holds the line for each check row, each finding, each gate that did not run, and what this change deliberately left alone.
 </steps>
 
+<mode name="incident">
+<steps>
+Run these steps only after a suspected loss of data, or after a wrong number that users saw. They add to the steps above.
+
+1. Stop every write. Find out whether the fault is a wrong display or a destructive write.
+2. Copy the data folder before anything else touches it.
+3. Reproduce the fault on the copy, never on the original.
+4. After the fix, record the impact, the root cause, the fix, and the prevention. The prevention is a test, or a rule that `r-record` writes.
+5. Tell the owner whether a re-import or a restore from backup is needed.
+6. Claim no legal or accounting compliance. State what the software does.
+</steps>
+</mode>
+
 <rules>
 - A finding follows the defect report form of `r-record`.
 - An accepted ADR replaces a skill rule only if the ADR is a divergence. An ADR that differs from a skill rule and does not name the three parts of a divergence is a finding.

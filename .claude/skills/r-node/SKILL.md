@@ -16,7 +16,11 @@ This skill names the tools and the Make targets for JavaScript and TypeScript fi
 1. If the project has no `package.json`, or no Prettier and no ESLint, read `references/tooling.md` and run `make node-tooling`.
 2. If `CLAUDE.md` names a framework, read `references/frameworks.md` and the file in `references/` that has the name of the framework.
 3. Write source in `src/`. Use TypeScript if the project already uses it. A new file follows that choice.
-4. To add a dependency, run `make npm ARGS='...'`. `make setup` installs the dependencies.
+4. To add a dependency, run `make npm ARGS='...'`. `make setup` installs the dependencies. Before you add a package, answer these 4 points:
+   1. Does `package.json` already hold a package that does the same job? A package for one trivial function needs a reason.
+   2. Is the licence clear, and is the package maintained?
+   3. Does the package touch XML, the file system, cryptography, or a hot path? Then `r-security` and `r-performance` apply.
+   4. After the add, run `make npm ARGS='audit'` and fix each high or critical finding before the merge.
 </steps>
 
 <rules>
@@ -29,7 +33,7 @@ This skill names the tools and the Make targets for JavaScript and TypeScript fi
 
 <references>
 - `references/tooling.md`: read it before you run `make node-tooling`, when you change `templates/Makefile.node` or `node.mk`, or when the project is a library.
-- `references/coverage.md`: read it when the test runner is not `node --test`, or when `make coverage` or `make test-changed` fails.
+- `references/coverage.md`: read it when the test runner is not `node --test`, when you write a Vitest test, or when `make coverage` fails.
 - `references/frameworks.md` and a file named by a framework: read them when `CLAUDE.md` names that framework.
-- `references/upgrade.md`: read it when `r-component-upgrade` updates a component of this language.
+- `references/upgrade.md`: read it when `r-component-upgrade` updates a component of this language, and before a major upgrade or a change of the Node major version.
 </references>
