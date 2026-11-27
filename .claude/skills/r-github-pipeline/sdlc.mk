@@ -115,9 +115,7 @@ GH = podman run --rm -e GH_TOKEN -e GITHUB_TOKEN -e GH_HOST -e GITHUB_RUN_ID -e 
 GIT_DESCRIBE = git describe --tags --abbrev=0 --match 'v[0-9]*'
 GIT_TAG = $(shell $(GIT_DESCRIBE) 2>/dev/null)
 
-# Use $(THIS_MAKE) in a recipe that must not run under `make -n`.
-# A recipe that says $(MAKE) is executed even during a dry run.
-THIS_MAKE := $(MAKE)
+# THIS_MAKE comes from tools.mk of r-project-setup.
 
 # setup, build, test, and the publish targets are phony here so a build/
 # directory cannot satisfy the build target.

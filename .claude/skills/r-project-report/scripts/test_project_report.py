@@ -1787,6 +1787,38 @@ class MakeAndPodmanInterfaceTest(unittest.TestCase):
             skill,
         )
 
+    def test_maven_mirror_is_used_only_when_set(self):
+        """id: R-128"""
+        jvm = ROOT / "skills" / "r-jvm" / "jvm.mk"
+        self.assertRegex(jvm.read_text(encoding="utf-8"), r"(?m)^MAVEN_MIRROR \?=$")
+        with tempfile.TemporaryDirectory() as tmp:
+            makefile = Path(tmp) / "Makefile"
+            makefile.write_text(
+                f"include {jvm}\nshow:\n\t@echo '$(GRADLE_RUN)'\n", encoding="utf-8"
+            )
+            run = ["make", "--no-print-directory", "-f", str(makefile), "show"]
+            plain = subprocess.run(
+                run, cwd=tmp, capture_output=True, text=True, check=True
+            ).stdout
+            mirror = "https://mirror.invalid/maven2/"
+            mirrored = subprocess.run(
+                [*run, f"MAVEN_MIRROR={mirror}"],
+                cwd=tmp,
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout
+        self.assertNotIn("MAVEN_MIRROR", plain)
+        self.assertNotIn("init.d", plain)
+        self.assertIn(f"-e MAVEN_MIRROR={mirror}", mirrored)
+        script = jvm.parent / "maven-mirror.gradle"
+        self.assertIn(
+            f'-v "{script}":/gradle/init.d/r-maven-mirror.gradle:ro', mirrored
+        )
+        text = script.read_text(encoding="utf-8")
+        self.assertIn("System.getenv('MAVEN_MIRROR')", text)
+        self.assertIn("'https://repo.maven.apache.org/maven2'", text)
+
     def test_a_client_package_has_one_generic_publish_workflow(self):
         """id: R-117"""
         text = (self.PIPELINE / "templates" / "publish-client.yml").read_text(
@@ -2512,6 +2544,9 @@ HELP_GROUP_OF = {
     "lint": "Gates",
     "integration": "Gates",
     "coverage": "Gates",
+    "gates": "Gates",
+    "gates-check": "Gates",
+    "git-hooks": "Gates",
     "docs": "Gates",
     "test-changed": "Gates",
     "check-docs": "Gates",

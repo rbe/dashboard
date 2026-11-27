@@ -26,7 +26,7 @@ Board:
 Gates:
 
 - The gates are `make editorconfig`, `make format`, `make lint`, `make test`, `make integration`, and `make coverage`. CI runs the same six targets.
-- A change is done when `make lint` and `make test` passed after the last edit. Report a gate that did not run as not run, and why.
+- A change is done when `make gates` passed after the last edit. `r-review` runs it once, and the pre-push hook checks its stamp. Report a gate that did not run as not run, and why.
 - A test names the ADR id or the requirement id that it proves in a line `id:`. Stop when a test has no id.
 - Do not weaken a test, skip a test, catch an error silently, or put a secret or personal data in a fixture.
 - A method does one thing or only composes other methods. Name each unit, function, method, class, and file from the domain.

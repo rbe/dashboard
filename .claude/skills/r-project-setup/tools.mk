@@ -8,6 +8,11 @@
 ifndef PROJECT_TOOLS_MK
 PROJECT_TOOLS_MK := 1
 
+# Use $(THIS_MAKE) in a recipe that must not run under `make -n`.
+# A recipe that says $(MAKE) is executed even during a dry run. It is set
+# here, before contract.mk, so a command variable of the project can use it.
+THIS_MAKE := $(MAKE)
+
 EDITORCONFIG_IMAGE ?= ghcr.io/editorconfig-checker/editorconfig-checker:4.0.2
 RUFF_IMAGE ?= ghcr.io/astral-sh/ruff:0.15.2
 # The branch a slice is compared with. coverage and test-changed read it.

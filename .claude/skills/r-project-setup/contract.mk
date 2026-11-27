@@ -15,6 +15,18 @@ ifndef CONTRACT_MK
 CONTRACT_MK := 1
 
 REGISTRY ?= ghcr.io
+# An unset command variable is empty, so --warn-undefined-variables stays
+# quiet and the stub of its target names the variable to set.
+SETUP_CMD ?=
+BUILD_CMD ?=
+TEST_CMD ?=
+FORMAT_CMD ?=
+FORMAT_FIX_CMD ?=
+LINT_CMD ?=
+INTEGRATION_CMD ?=
+COVERAGE_CMD ?=
+RENDER_DOCS ?=
+PUBLISH_IMAGE ?=
 
 # The directory of this file, relative to the repository root. $(PYTHON)
 # mounts the repository root as its working directory, so a path from the
@@ -24,7 +36,7 @@ DOCS_SOURCE ?= docs
 DOCS_OUT ?= build/docs
 DOCS_OPTIONS ?=
 
-.PHONY: setup build test project-report editorconfig format format-fix lint integration coverage
+.PHONY: setup build test project-report editorconfig format format-fix lint integration coverage gates gates-check git-hooks
 
 # The project stub. doctor.mk makes doctor the first prerequisite of
 # setup. setup installs no tool on the host: every tool is a Podman
@@ -108,6 +120,47 @@ endif
 
 # test-changed is test-changed.mk beside this file.
 
+# The six gates in order. Only when all pass, the stamp build/gates.ok
+# gets the tree id of the working tree (scripts/tree-hash.sh). The pre-push
+# hook compares that id, so an edit after the gates makes the push fail.
+# The first failing gate stops the recipe and leaves no stamp.
+# help-group: Gates
+gates: ## Run the six gates, then stamp the working tree
+	rm -f build/gates.ok
+	$(THIS_MAKE) editorconfig
+	$(THIS_MAKE) format
+	$(THIS_MAKE) lint
+	$(THIS_MAKE) test
+	$(THIS_MAKE) integration
+	$(THIS_MAKE) coverage
+	sh $(CONTRACT_DIR)/scripts/gates-stamp.sh write
+
+# Exits non-zero when build/gates.ok is missing or differs from the
+# working tree. r-release runs it before the push.
+# help-group: Gates
+gates-check: ## Check that make gates passed after the last edit
+	@sh $(CONTRACT_DIR)/scripts/gates-stamp.sh check || { printf '%s\n' "gates-check: build/gates.ok is missing or stale. Run make gates." >&2; exit 1; }
+
+# Writes .git/hooks/pre-push, which runs scripts/pre-push.sh. It replaces
+# a hook that carries the marker line, and prints and skips any other
+# hook, so it never overwrites a hook of the project in silence.
+# setup runs it. Outside a git work tree it does nothing.
+# help-group: Gates
+git-hooks: ## Install the pre-push hook that checks build/gates.ok
+	@set -eu; \
+	git rev-parse --git-dir >/dev/null 2>&1 || { printf '%s\n' "git-hooks: not a git work tree, skipped."; exit 0; }; \
+	hook=$$(git rev-parse --git-path hooks/pre-push); \
+	marker='# r-project-setup pre-push'; \
+	if [ -e "$$hook" ] && ! grep -q "$$marker" "$$hook"; then \
+	  printf '%s\n' "git-hooks: $$hook exists and is not from r-project-setup. Skipped. Add: sh $(CONTRACT_DIR)/scripts/pre-push.sh"; exit 0; \
+	fi; \
+	mkdir -p "$$(dirname "$$hook")"; \
+	printf '#!/bin/sh\n%s\nexec sh "$$(git rev-parse --show-toplevel)/$(CONTRACT_DIR)/scripts/pre-push.sh" "$$@"\n' "$$marker" > "$$hook"; \
+	chmod +x "$$hook"; \
+	printf '%s\n' "git-hooks: installed $$hook"
+
+setup: git-hooks
+
 # Generated. Hand-editing build/project-report.md is a defect.
 # report.mk in the r-project-report skill owns this target when that skill
 # is installed. This recipe is for a project without that include.
@@ -131,6 +184,7 @@ endif
 # build/summaries/docs.md. A project that sets DOCS_CMD keeps its own renderer.
 # Marker `# help-docs`: help lists this target only when RENDER_DOCS is 1.
 ifeq ($(RENDER_DOCS),1)
+DOCS_CMD ?=
 ifeq ($(strip $(DOCS_CMD)),)
 DOCS_CMD = set -eu; \
 	mkdir -p build/summaries; \

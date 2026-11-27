@@ -11,6 +11,8 @@
 ifndef TEST_CHANGED_MK
 TEST_CHANGED_MK := 1
 
+TEST_CHANGED_CMD ?=
+
 .PHONY: test-changed
 
 # Tests whose coverage includes a file in the diff. Not a CI substitute for test.

@@ -6,7 +6,7 @@ description: Implements a closed slice plan with its tests, using the installed 
 The general rules in `CLAUDE.md` apply.
 
 <purpose>
-`r-develop` changes the code and the tests of one slice, and it proves the change with the gates.
+`r-develop` changes the code and the tests of one slice, and it proves the change with `make test-changed`. `r-review` runs the gates.
 </purpose>
 
 <steps>
@@ -27,12 +27,11 @@ The general rules in `CLAUDE.md` apply.
 7. Compare the change with the general rules on tests, fixtures, methods, and names. Stop when the change breaks one.
 8. Run `make coverage`, then `make test-changed`.
    `make coverage` writes the coverage map, and `test-changed` selects the tests from that map. A green `test-changed` does not replace `make test`.
-   Stop when the coverage map is missing.
-9. Run `make lint` and `make test`. Stop when either target fails.
-10. If a source or test file changed after the last run of `make coverage`, run `make coverage` again.
-    Stop when `build/coverage/diff.md` is missing.
-    If the change has only test files or documents, the report has no line. Write that in the Develop section.
-11. Ask `r-record` to write the Develop section.
+   Stop when the coverage map is missing or `make test-changed` fails.
+9. If a source or test file changed after the last run of `make coverage`, run `make coverage` again.
+   Stop when `build/coverage/diff.md` is missing.
+   If the change has only test files or documents, the report has no line. Write that in the Develop section.
+10. Ask `r-record` to write the Develop section. It says that `r-review` runs the gates.
 </steps>
 
 <rules>
