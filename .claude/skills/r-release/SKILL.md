@@ -13,7 +13,7 @@ The general rules in `CLAUDE.md` apply.
 1. If the change touches the workflow, the version, publish, the image, cleanup, or retention, invoke `r-github-pipeline`.
 2. Invoke `r-project-setup` only if that same change adds or overrides a Make target.
 3. If this task does not ship, ask `r-record` to write the Release section `Not invoked: this slice does not ship.` and to close the task. Commit the board documents with the change, push the branch, and stop.
-4. Read the Review section of the history file. Stop if the section does not report `make lint` and `make test` as passed. Stop if a finding is neither fixed nor a roadmap row.
+4. Read the Review section of the history file. Stop if the section does not report all six gates as passed, or if `make gates-check` fails. Stop if a finding is neither fixed nor a roadmap row.
 5. If the request did not ask for a ship, ask the owner before the ship. Stop if the owner says no.
 6. Commit the change on the one branch of the slice. If `origin` exists, push the branch.
 7. If the repository has `.github/workflows` and `r-github-pipeline` is installed, run `make ci-status WAIT=1` for the commit of that push. If the repository has no workflow, run the gate targets of the general rules. Stop if the target or a gate fails.

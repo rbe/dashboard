@@ -18,6 +18,7 @@ ifndef PYTHON
 include $(PROJECT_REPORT_DIR)../r-project-setup/podman-python.mk
 endif
 
+PROJECT_REPORT_CMD ?=
 ifeq ($(strip $(PROJECT_REPORT_CMD)),)
 PROJECT_REPORT_CMD = $(PYTHON) "$(PROJECT_REPORT_DIR)scripts/project_report.py"
 endif
