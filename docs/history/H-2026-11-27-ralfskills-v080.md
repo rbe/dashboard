@@ -1,6 +1,6 @@
 ---
 id: H-2026-11-27-ralfskills-v080
-title: Move to RalfSkills 4c028a8
+title: Move to RalfSkills v0.8.0
 status: closed
 adrs: []
 skills: [r-plan, r-develop, r-review, r-record]
@@ -8,7 +8,7 @@ roadmap: []
 proposals: []
 ---
 
-# Move to RalfSkills 4c028a8
+# Move to RalfSkills v0.8.0
 
 ## Plan
 

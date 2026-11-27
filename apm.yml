@@ -5,7 +5,7 @@ targets:
 dependencies:
   apm:
     - git: rbe/ralfskills
-      ref: 4c028a894eb314b2fe2730d1093c0d117a1de66c
+      ref: v0.8.0
       skills:
         - r-plan
         - r-develop
