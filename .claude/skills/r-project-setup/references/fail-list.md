@@ -8,7 +8,7 @@ The repository fails this contract when:
 - `CLAUDE.md` is missing, or it does not hold the stages, the installed language skills and subskills, and the import line `@.claude/skills/r-project-setup/rules.md`, or it holds a copy of that file
 - `setup`, `build`, or `test` is missing, `docs` is missing while the repository renders docs, `login` is missing while an image is published, or one of those targets is not `.PHONY`
 - `doctor`, `skills-install`, `skills-update`, or `old-board` is missing
-- `SETUP_CMD`, `BUILD_CMD`, or `TEST_CMD` is empty, or `DOCS_CMD` is empty while the repository renders docs
+- `SETUP_CMD`, `BUILD_CMD`, or `TEST_CMD` is empty, or a project keeps its own docs renderer instead of `scripts/render_docs.py`
 - a person, an agent, or a workflow step runs Gradle, npm, Podman, python, or tar directly, except the one `podman run` line of the README, instead of `make setup`, `make build`, `make test`, `make docs`, or `make login`
 - the Makefile does not include `.claude/skills/r-project-setup/project.mk` before any target, unless it includes `.claude/skills/r-github-pipeline/sdlc.mk` instead, or a root `project.mk` is still the include
 - the Makefile defines a target of the Make contract again after the include, instead of setting its command variable. No template is an exception

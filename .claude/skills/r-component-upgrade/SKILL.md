@@ -13,9 +13,9 @@ This skill updates one component to a newer version in one slice. A component is
 1. Name the one component, its current version, and the target version. Find the pin with a search of the makefiles and the manifests.
 2. If the component is this skill collection, follow the Update section of the README and stop here.
 3. Read the release notes between the two versions. List each breaking change that the project uses.
-4. If a skill named `r-upgrade-<language>-components` matches the component, read it for the files, the commands, and the known traps of that environment.
+4. If the installed language skill of the component has the file `upgrade.md` in its `references` folder, read that file for the files, the commands, and the known traps of that environment.
 5. Run the gates before the change. Keep the result as the baseline.
-6. Change the one pin. If a lock file changes, use the Make target that the language upgrade skill names.
+6. Change the one pin. If a lock file changes, use the Make target that `upgrade.md` names.
 7. Run the gates again. Compare the result with the baseline.
 8. Ask `r-record` for the history file. Give it the old version, the new version, the breaking changes, and the gate results before and after.
 </steps>

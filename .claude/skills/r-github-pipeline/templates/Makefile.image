@@ -1,6 +1,6 @@
 # The image block of a project that delivers a container image from the
-# Makefile of its language skill: r-python, r-go, r-node, or any other. This file is
-# not a Makefile. Add its lines to the Makefile above the include, then
+# Makefile of its language skill: r-python, r-go, r-node, r-jvm, or any
+# other. This file is not a Makefile. Add its lines to the Makefile, then
 # change the include from project.mk to
 # .claude/skills/r-github-pipeline/sdlc.mk. sdlc.mk keeps the contract
 # targets of r-project-setup, so setup, build, test, format, lint, and
@@ -12,9 +12,16 @@
 #    commented lines below are the place.
 # 2. Copy the Containerfile template of the language to Containerfile and
 #    `containerignore` to .containerignore.
-# 3. Copy every line below into the Makefile, above the include. Keep the
-#    lines marked "language" that the project needs. BUILD_CMD += stands
-#    after the line BUILD_CMD = of the language template.
+# 3. Part 1 stands below the command variables of the language template
+#    and above the include. Keep the lines marked "language" that the
+#    project needs. BUILD_CMD += stands after the line BUILD_CMD = of the
+#    language template. Part 2 stands after the includes, at the end.
+# 4. Optional blocks start with a "keep" line and end with an "end" line.
+#    Keep a block that fits the project. Delete the others with both
+#    lines.
+# 5. Set RENDER_DOCS = 1 to render docs/ with the shared renderer.
+
+# ---- Part 1: above the include ----
 
 IMAGE ?= ghcr.io/$(OWNER)/$(NAME)
 PACKAGE ?= $(OWNER)/$(NAME)
@@ -33,5 +40,126 @@ SDLC_CI = setup build editorconfig format lint test integration coverage report
 # starts a program that does not exit by itself.
 # SMOKE_ARGS = --help
 # language: make build ends with the image. BUILD_CMD stays as the
-# language skill set it, and this line adds the image.
+# language skill set it, and this line adds the image. The Node block
+# and the JAR block below replace BUILD_CMD, so delete this line there.
 BUILD_CMD += && $(MAKE) --no-print-directory image-ci
+
+# Node: keep for a web app on r-node. Delete the BUILD_CMD += line above
+# and keep this block after the commands of the language template.
+# PORT is the port inside the container, and the container may use a
+# standard port. HOST_PORT is the port of the host that `make run`
+# binds. It stays above 1024, so no root privileges are needed.
+PORT ?= 4173
+HOST_PORT ?= 8173
+# curl runs in this image for the smoke check of make build. It joins
+# the network of the smoke container, so no port of the host is used.
+CURL_IMAGE ?= docker.io/curlimages/curl:8.17.0
+SMOKE_PATH ?= /api/health
+SMOKE_NEEDLE ?= ok
+# The page at / of a single-page app holds this text, such as the root
+# element of the app shell. Empty turns the page check off.
+SMOKE_PAGE_NEEDLE ?= id="root"
+DATA_DIR ?= data
+DATA_ENV ?= APP_DATA
+IMAGE_BUILD_ARGS = --build-arg NODE_VERSION=$(NODE_VERSION)
+# The jobs after setup unpack the dependencies that setup packed. The CI
+# workflow keeps its Node blocks for this. A # inside a command is
+# written \#.
+NODE_DEPS = if [ ! -d node_modules ]; then tar -xf build/deps/node_modules.tar; fi
+SETUP_CMD += && mkdir -p build/deps build/summaries \
+	&& tar -cf build/deps/node_modules.tar node_modules \
+	&& printf '\# setup\n\nNode %s. Dependencies packed.\n' "$(NODE_VERSION)" > build/summaries/setup.md
+BUILD_CMD = set -eu; \
+	$(NODE_DEPS); \
+	$(NODE) npm run build; \
+	$(THIS_MAKE) --no-print-directory image-ci
+SMOKE_CMD = name=$(NAME)-smoke; \
+	podman rm -f "$$name" >/dev/null 2>&1 || true; \
+	podman run -d --name "$$name" -e PORT=$(PORT) "$(CI_IMAGE)" >/dev/null; \
+	ok=0; \
+	i=0; \
+	while [ "$$i" -lt 30 ]; do \
+	  if podman run --rm --network "container:$$name" $(CURL_IMAGE) -fsSk "https://127.0.0.1:$(PORT)$(SMOKE_PATH)" 2>/dev/null | grep -qF '$(SMOKE_NEEDLE)'; then ok=1; break; fi; \
+	  i=$$((i + 1)); sleep 1; \
+	done; \
+	if [ "$$ok" = 1 ] && [ -n '$(SMOKE_PAGE_NEEDLE)' ] && ! podman run --rm --network "container:$$name" $(CURL_IMAGE) -fsSk "https://127.0.0.1:$(PORT)/" 2>/dev/null | grep -qF '$(SMOKE_PAGE_NEEDLE)'; then ok=0; printf '%s\n' 'smoke: the page / lacks SMOKE_PAGE_NEEDLE' >&2; fi; \
+	podman rm -f "$$name" >/dev/null 2>&1 || true; \
+	test "$$ok" = 1
+# End of Node.
+
+# JAR: keep for a project on r-jvm that builds the image from the tested
+# JAR. Delete the BUILD_CMD += line above. make image copies the JAR from
+# build/dist, and no Gradle runs in the image.
+JRE_IMAGE ?= docker.io/library/eclipse-temurin:25-jre
+JAR_GLOB ?= build/libs/$(NAME)-*.jar
+BUILD_CMD = set -eu; \
+	$(GRADLE) assemble; \
+	jars=$$(ls $(JAR_GLOB) 2>/dev/null | grep -v -- '-original.jar$$' || true); \
+	test "$$(printf '%s\n' "$$jars" | grep -c .)" -eq 1; \
+	mkdir -p build/dist build/summaries; \
+	cp "$$jars" build/dist/$(NAME).jar; \
+	printf '\# build\n\nJAR build/dist/%s.jar\n' "$(NAME)" > build/summaries/build.md
+CONTAINERFILE = build/image-context/Containerfile
+IMAGE_CONTEXT = build/image-context
+IMAGE_BUILD_ARGS = --build-arg JRE_IMAGE=$(JRE_IMAGE)
+IMAGE_PREPARE = test -f build/dist/$(NAME).jar; \
+	rm -rf build/image-context; \
+	mkdir -p build/image-context; \
+	cp build/dist/$(NAME).jar build/image-context/app.jar; \
+	cp Containerfile build/image-context/Containerfile
+PUBLISH_PREPARE = $(THIS_MAKE) --no-print-directory image
+# End of JAR.
+
+# Release: keep when the project publishes a GitHub release with one
+# file as asset. RELEASE_FILE is the built file, and RELEASE_ASSET is
+# its name in the release. $$version is MAJOR.MINOR.PATCH-run. The
+# tested JAR of the JAR block is the default.
+SDLC_JOBS += publish-github
+RELEASE_FILE ?= build/dist/$(NAME).jar
+RELEASE_ASSET ?= build/dist/$(NAME)-$$version.jar
+RELEASE_TITLE ?= $(NAME)
+# End of Release.
+
+# ---- Part 2: after the includes of sdlc.mk and the language file ----
+# A target stands after the includes, because the first target of the
+# file is the default goal, and sdlc.mk sets help.
+
+# Node: keep with the Node block of Part 1.
+.PHONY: run stop clean
+
+run: image ## Run detached on https://127.0.0.1:HOST_PORT
+	@test "$(HOST_PORT)" -gt 1024 || { echo "HOST_PORT $(HOST_PORT) must be above 1024." >&2; exit 1; }
+	@mkdir -p "$(DATA_DIR)"
+	@podman rm -f $(NAME) >/dev/null 2>&1 || true
+	podman run -d --name $(NAME) -p 127.0.0.1:$(HOST_PORT):$(PORT) -e PORT=$(PORT) \
+		-e $(DATA_ENV)=/app/data -v "$(CURDIR)/$(DATA_DIR):/app/data:Z" "$(IMAGE)"
+
+stop: ## Stop the detached container
+	@podman rm -f $(NAME) >/dev/null 2>&1 || true
+
+clean: ## Remove build/, dist/, and node_modules/
+	rm -rf build dist node_modules
+# End of Node.
+
+# Release: keep with the Release block of Part 1.
+.PHONY: publish-github
+
+publish-github: ## Match CI: release MAJOR.MINOR.PATCH-run with the tested file
+	@$(call SDLC_LOG,publish-github,_publish-github)
+
+_publish-github:
+	@set -eu; \
+	test -f $(RELEASE_FILE); \
+	version=$$($(THIS_MAKE) -s --no-print-directory version); \
+	asset=$(RELEASE_ASSET); \
+	cp $(RELEASE_FILE) "$$asset"; \
+	$(THIS_MAKE) --no-print-directory gh-image; \
+	if $(GH) release view "$$version" -R "$(PACKAGE)" >/dev/null 2>&1; then \
+	  $(GH) release upload "$$version" "$$asset" -R "$(PACKAGE)" --clobber; \
+	else \
+	  $(GH) release create "$$version" "$$asset" -R "$(PACKAGE)" --title "$$version" \
+	    --notes "$(RELEASE_TITLE) $$version." --target "$$(git rev-parse HEAD)"; \
+	fi; \
+	mkdir -p build/summaries; \
+	printf '\# publish-github\n\nStatus: released\nRelease: %s\n' "$$version" > build/summaries/publish-github.md
+# End of Release.

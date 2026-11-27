@@ -1,34 +1,37 @@
-# One pipeline. Delivery is the container image and a GitHub release with
-# the JAR.
+# One pipeline for any language. Delivery is the container image.
 # Jobs: setup, then build and test beside each other, then
-# publish-container and publish-github (each needs build and test), then report.
-# There is no docs job. A repository that renders docs adds the job of
-# ci.node.yml, the docs target, and its own renderer.
-# The Make contract is the r-project-setup skill: help is the default goal.
-# setup, build, test, and login are that skill's target names.
-# The jobs setup, build, and test use those names. login is the
-# step `make login`, not its own job. This workflow calls make; it does
-# not define the contract.
-# A developer or agent can do everything this pipeline does through Make.
-# The YAML only checks out, uploads and downloads artifacts, and calls make.
-# Registry login is `make login`. Gradle, npm, podman, python, and tar run
-# inside the matching target.
-# The Gradle case is build: the build job runs `make build`, and that target
-# runs Gradle. The job does not call ./gradlew. setup and test are
-# the same kind of target. Between jobs only the tested JAR moves. test
-# runs beside build and compiles again; it does not download build output.
-# Publishing runs when workflow_dispatch selects a publish job: a human
-# starts it, so a large image or JAR stays inside the GitHub quotas. It
-# runs on a push to the default branch only when the repository variable
+# publish-container (needs build and test), then report.
+# Blocks between "keep" and "end" comment lines are optional: keep a
+# block or delete it with both of its comment lines. With every optional
+# block deleted, this file is the plain image pipeline. Node keeps the
+# Node blocks. A Gradle project that publishes a GitHub release with the
+# JAR keeps the Release blocks, and the JAR blocks if the image is built
+# from the tested JAR. With the JAR blocks deleted, build hands the image
+# tar to publish-container.
+# There is no docs job. A repository that renders docs adds a docs job
+# that runs `make docs`, the docs target, and its own renderer.
+# publish-container runs when workflow_dispatch selects it: a human
+# starts it, so a large image stays inside the GitHub quotas. It runs on
+# a push to the default branch only when the repository variable
 # AUTO_PUBLISH is true. A tag push does not start a run; after tagging
-# vX.Y.Z, dispatch the publish job. A default-branch publish tags
-# <X.Y.Z>-<run> and latest, then keeps that run and the next-lower run.
-# A manual publish from any other ref tags the version only.
+# vX.Y.Z, dispatch publish-container. Any other branch skips it.
+# A default-branch publish tags <X.Y.Z>-<run> and latest, then keeps that
+# run and the next-lower run on the same line. A manual publish from any
+# other ref tags the version only: it does not move latest and cleanup
+# deletes nothing. A skipped or failed publish deletes nothing.
 # report is last and still runs when an earlier job fails or is skipped.
 # setup runs make ci-scope after the artifact cleanup. If a push changes
 # only board files and the CI run of its base commit passed, setup skips
 # make setup, and build and test skip. A skipped job counts as passed
 # for make ci-status and make pull-request-merge.
+# The Make contract is the r-project-setup skill: help is the default goal.
+# setup, build, test, and login are that skill's target names. This
+# workflow calls make; it does not define the contract. Every step is
+# checkout, an artifact upload or download, or make. The language runs
+# inside the targets, in Podman. Replace OWNER and NAME.
+# The name publish-github stays in the contains() lists of build and
+# test. Without the Release blocks no job has that name, so the name
+# never matches.
 
 name: CI
 
@@ -42,7 +45,14 @@ on:
         required: true
         type: choice
         options:
-          [setup, build, test, publish-container, publish-github, report]
+          - setup
+          - build
+          - test
+          - publish-container
+          # Release: keep when the project publishes a GitHub release.
+          - publish-github
+          # End of Release.
+          - report
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -54,6 +64,9 @@ permissions:
 env:
   IMAGE: ghcr.io/OWNER/NAME
   SDLC_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+  # Node: keep for a Node project.
+  NODE_VERSION: "24"
+  # End of Node.
 
 jobs:
   setup:
@@ -79,6 +92,15 @@ jobs:
         run: make ci-scope
       - if: steps.scope.outputs.board-only != 'true'
         run: make setup
+      # Node: keep for a Node project. make setup packs the dependencies.
+      - uses: actions/upload-artifact@v7
+        if: steps.scope.outputs.board-only != 'true'
+        with:
+          name: deps
+          path: build/deps/node_modules.tar
+          if-no-files-found: error
+          retention-days: 1
+      # End of Node.
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -95,13 +117,32 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
+      # Node: keep for a Node project.
+      - uses: actions/download-artifact@v8
+        with:
+          name: deps
+          path: build/deps
+      # End of Node.
       - run: make build
+      # Image: keep when publish-container pushes the image tar of make build.
+      # Delete it when the JAR blocks stay.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: image
+          path: build/image
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+      # End of Image.
+      # JAR: keep when publish builds the image from the tested JAR.
+      # Delete it when the Image block stays.
       - uses: actions/upload-artifact@v7
         with:
           name: jar
           path: build/dist
           if-no-files-found: error
           retention-days: 1
+      # End of JAR.
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -120,6 +161,12 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      # Node: keep for a Node project.
+      - uses: actions/download-artifact@v8
+        with:
+          name: deps
+          path: build/deps
+      # End of Node.
       - run: make editorconfig
       - run: make format
       - run: make lint
@@ -134,8 +181,8 @@ jobs:
             build/logs
             build/summaries
             build/test-results
-            build/reports
             build/coverage
+            build/reports
           if-no-files-found: ignore
           retention-days: 1
 
@@ -153,10 +200,18 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+      # Image: keep with the Image block of the build job.
+      - uses: actions/download-artifact@v8
+        with:
+          name: image
+          path: build/image
+      # End of Image.
+      # JAR: keep with the JAR block of the build job.
       - uses: actions/download-artifact@v8
         with:
           name: jar
           path: build/dist
+      # End of JAR.
       - run: make login
         env:
           REGISTRY_USER: ${{ github.actor }}
@@ -177,6 +232,8 @@ jobs:
           if-no-files-found: ignore
           retention-days: 1
 
+  # Release: keep when the project publishes a GitHub release. It needs
+  # the JAR block of the build job, or another file in build/dist.
   publish-github:
     needs: [build, test]
     if: >-
@@ -210,9 +267,17 @@ jobs:
             build/summaries
           if-no-files-found: ignore
           retention-days: 1
+  # End of Release.
 
   report:
-    needs: [setup, build, test, publish-container, publish-github]
+    needs:
+      - setup
+      - build
+      - test
+      - publish-container
+      # Release: keep when the project publishes a GitHub release.
+      - publish-github
+      # End of Release.
     if: ${{ !cancelled() }}
     runs-on: ubuntu-26.04
     steps:
@@ -229,7 +294,9 @@ jobs:
           JOB_RESULT_BUILD: ${{ needs.build.result }}
           JOB_RESULT_TEST: ${{ needs.test.result }}
           JOB_RESULT_PUBLISH_CONTAINER: ${{ needs.publish-container.result }}
+          # Release: keep when the project publishes a GitHub release.
           JOB_RESULT_PUBLISH_GITHUB: ${{ needs.publish-github.result }}
+          # End of Release.
       - uses: actions/upload-artifact@v7
         if: always()
         with:

@@ -30,7 +30,7 @@ setup ──┬── build ──┬── publish-container ──┐
 - Permissions: `contents: read` at the top, `actions: write` on `setup`, `packages: write` on `publish-container`, `contents: write` on `publish-github`.
 - The YAML contains no `./gradlew`, `npm`, `podman`, `python`, `tar`, `printf`, or `tee`. Gradle is `make build`. The registry login is `make login`.
 - The workflow `env` holds `IMAGE` and `SDLC_DEFAULT_BRANCH`, which is `github.event.repository.default_branch`. The Makefile sets `IMAGE` to the same image name.
-- The `env` of the Node template also holds `NODE_VERSION` at 24. A Gradle project uses the JDK of its template.
+- The Node block of `templates/ci.yml` also holds `NODE_VERSION` at 24. A Gradle project deletes that block and uses the JDK of `r-jvm`.
 - The workflow pins one runner label, `ubuntu-26.04`.
 
 ## Artifacts and retention

@@ -5,7 +5,7 @@
 #
 # A project changes what these targets do only through the command
 # variables. No project defines one of these targets again, and the
-# Node and Gradle makefiles of r-github-pipeline set the variables too.
+# The language makefiles set the variables too.
 # A command variable that holds a # writes it as \#, because Make reads
 # an unescaped # as a comment.
 #
@@ -15,6 +15,14 @@ ifndef CONTRACT_MK
 CONTRACT_MK := 1
 
 REGISTRY ?= ghcr.io
+
+# The directory of this file, relative to the repository root. $(PYTHON)
+# mounts the repository root as its working directory, so a path from the
+# root works there. Read MAKEFILE_LIST here, before another include moves it.
+CONTRACT_DIR := $(patsubst $(abspath .)/%,%,$(abspath $(dir $(lastword $(MAKEFILE_LIST)))))
+DOCS_SOURCE ?= docs
+DOCS_OUT ?= build/docs
+DOCS_OPTIONS ?=
 
 .PHONY: setup build test project-report editorconfig format format-fix lint integration coverage
 
@@ -98,7 +106,7 @@ else
 	$(COVERAGE_CMD)
 endif
 
-# test-changed is test-changed.mk beside this file. sdlc.mk includes it too.
+# test-changed is test-changed.mk beside this file.
 
 # Generated. Hand-editing build/project-report.md is a defect.
 # report.mk in the r-project-report skill owns this target when that skill
@@ -117,9 +125,18 @@ else
 endif
 endif
 
-# Stub. Set RENDER_DOCS=1 only when this repository renders docs.
+# Set RENDER_DOCS=1 only when this repository renders docs. A project that
+# sets no DOCS_CMD gets scripts/render_docs.py of this skill: it renders
+# DOCS_SOURCE to DOCS_OUT with DOCS_OPTIONS (such as --lang de) and writes
+# build/summaries/docs.md. A project that sets DOCS_CMD keeps its own renderer.
 # Marker `# help-docs`: help lists this target only when RENDER_DOCS is 1.
 ifeq ($(RENDER_DOCS),1)
+ifeq ($(strip $(DOCS_CMD)),)
+DOCS_CMD = set -eu; \
+	mkdir -p build/summaries; \
+	$(PYTHON) $(CONTRACT_DIR)/scripts/render_docs.py $(DOCS_OPTIONS) $(DOCS_SOURCE) $(DOCS_OUT); \
+	printf '\# docs\n\n%s HTML files.\n' "$$(find $(DOCS_OUT) -type f | wc -l | tr -d ' ')" > build/summaries/docs.md
+endif
 # help-docs
 .PHONY: docs
 # help-group: Gates

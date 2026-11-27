@@ -9,7 +9,7 @@ Step 3 reads this section before it sets a command variable, and when a recipe r
 - If a recipe runs Gradle, npm, node, python, or go on the host, rewrite it to the command variable and keep what it does. The command of the template replaces a host recipe that runs the same tests or the same build. A target with no command variable, such as `run`, keeps its name and its place after the include. Its recipe uses `$(PYTHON)`, `$(NODE)`, `$(GRADLE)`, or `$(GO)`.
 - If the project has no dependency to resolve, no artifact to build, or no integration entry, set that command to `true`.
 - If the project ships a binary or a library package, set what the language skill names for it, such as `BIN` for Go, or set `BUILD_CMD`. Then `make build` writes the shipment from the first run.
-- If the repository renders docs, set `RENDER_DOCS` and `DOCS_CMD`. If an image is published, set `PUBLISH_IMAGE`.
+- If the repository renders docs, set `RENDER_DOCS`, and `DOCS_OPTIONS` if the pages need options. Delete the project's own renderer. If an image is published, set `PUBLISH_IMAGE`.
 
 ## An existing `CLAUDE.md`
 

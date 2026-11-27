@@ -149,6 +149,27 @@ class CheckDocsTest(unittest.TestCase):
         self.assertEqual(passed, 0)
         self.assertIn("check-docs: no skill text names", out.getvalue())
 
+    def test_a_target_of_a_skill_that_is_not_installed_is_not_missing(self):
+        """id: R-111"""
+        text = "Run `make ci-status` and `make wrapper`.\n"
+        self.assertEqual(self.errors(text), [])
+
+    def test_a_target_of_an_installed_optional_skill_must_exist(self):
+        """id: R-111"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            product(root, "Run `make ci-status`.\n")
+            write(root, ".claude/skills/r-github-pipeline/SKILL.md", "x\n")
+            errors = check_docs.problems(root)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("no makefile defines make ci-status", errors[0])
+
+    def test_the_optional_target_table_matches_the_makefiles_of_the_collection(self):
+        """id: R-111"""
+        for skill, names in check_docs.OPTIONAL_SKILL_TARGETS.items():
+            defined = check_docs.defined_targets(ROOT / "skills" / skill)
+            self.assertEqual(sorted(names - defined), [], skill)
+
     def test_the_skills_of_this_collection_name_no_missing_path_or_target(self):
         """id: R-111"""
         self.assertEqual(check_docs.problems(ROOT), [])
@@ -160,11 +181,12 @@ class CheckDocsTest(unittest.TestCase):
         )
         self.assertIn("\ncheck-docs: ##", text)
         self.assertIn("\ntest: check-docs\n", text)
-        for name in (
-            "skills/r-project-setup/project.mk",
-            "skills/r-github-pipeline/sdlc.mk",
-        ):
-            self.assertIn("check-docs.mk", (ROOT / name).read_text(encoding="utf-8"))
+        project = (ROOT / "skills/r-project-setup/project.mk").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("check-docs.mk", project)
+        sdlc = (ROOT / "skills/r-github-pipeline/sdlc.mk").read_text(encoding="utf-8")
+        self.assertIn("include $(SDLC_MK_DIR)../r-project-setup/project.mk", sdlc)
 
     def test_a_language_target_is_named_only_by_its_language_skills(self):
         """id: R-111"""
@@ -174,18 +196,12 @@ class CheckDocsTest(unittest.TestCase):
             "r-go": ("go", "go-tooling"),
             "r-jvm": ("wrapper", "jvm-tooling", "podman-socket"),
         }
-        upgrade = {
-            "r-node": "r-upgrade-node-components",
-            "r-python": "r-upgrade-python-components",
-            "r-go": "r-upgrade-go-components",
-            "r-jvm": "r-upgrade-java-components",
-        }
         found = []
         for path in sorted((ROOT / "skills").glob("r-*/**/*.md")):
             skill = path.relative_to(ROOT / "skills").parts[0]
             text = path.read_text(encoding="utf-8")
             for owner, targets in owners.items():
-                if skill in (owner, upgrade[owner]):
+                if skill == owner:
                     continue
                 for target in targets:
                     if f"`make {target}`" in text or f"`make {target} " in text:

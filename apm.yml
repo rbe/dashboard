@@ -5,7 +5,7 @@ targets:
 dependencies:
   apm:
     - git: rbe/ralfskills
-      ref: v0.7.1
+      ref: 4c028a894eb314b2fe2730d1093c0d117a1de66c
       skills:
         - r-plan
         - r-develop
@@ -22,7 +22,6 @@ dependencies:
         - r-api-design
         - r-ux-ui-design
         - r-component-upgrade
-        - r-upgrade-node-components
         - r-observability
         - r-performance
         - r-skills-review

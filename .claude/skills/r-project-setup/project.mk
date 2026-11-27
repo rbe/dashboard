@@ -29,6 +29,7 @@
 #
 # Set before the include:
 #   HELP_LEAD        first line of `make help`
+#   HELP_NOTES       shell command that prints more lines after it
 #   SETUP_CMD        how this project resolves dependencies
 #   BUILD_CMD        how this project produces the artifact
 #   TEST_CMD         how this project runs the unit tests
@@ -40,7 +41,8 @@
 #   TEST_CHANGED_CMD tests that cover the diff, selected from that map
 #   PROJECT_REPORT_CMD writes build/project-report.md
 #   RENDER_DOCS      1 when this repository renders docs
-#   DOCS_CMD         the renderer, required when RENDER_DOCS is 1
+#   DOCS_CMD         the renderer. Default: scripts/render_docs.py
+#   DOCS_OPTIONS     options of that renderer, such as --lang de
 #   PUBLISH_IMAGE    1 when an image is published
 #   REGISTRY         login host. Default ghcr.io
 
@@ -59,12 +61,15 @@ include $(PROJECT_MK_DIR)check-docs.mk
 -include .claude/skills/r-project-report/report.mk
 
 HELP_LEAD ?= Make is the only interface. A target does the same thing locally and in CI.
+# HELP_NOTES is a shell command that prints extra lines after the lead.
+HELP_NOTES ?= true
 
 .PHONY: help
 
 # help-group: Tools
 help: ## Show the targets
 	@printf '%s\n' "$(HELP_LEAD)"
+	@$(HELP_NOTES)
 	@$(HELP_LIST)
 
 # The targets of the Make contract: setup, build, test, editorconfig,

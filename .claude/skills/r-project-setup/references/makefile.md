@@ -10,7 +10,6 @@ FORMAT_CMD = npm exec -- prettier --check .
 LINT_CMD = npm exec -- eslint .
 INTEGRATION_CMD = npm run integration
 RENDER_DOCS = 1
-DOCS_CMD = node scripts/render-docs.mjs docs build/docs
 PUBLISH_IMAGE = 1
 include .claude/skills/r-project-setup/project.mk
 
@@ -42,10 +41,10 @@ Make reads `RENDER_DOCS` and `PUBLISH_IMAGE` while it parses `project.mk`. Set t
 | `apm` | Always | Runs any other APM command: `make apm ARGS='...'` |
 | `py` | Always | Runs Python in Podman: `make py ARGS='...'` |
 | `project-report` | When that skill is installed | Writes `build/project-report.md` |
-| `docs` | Only when the repository renders docs | Runs the renderer |
+| `docs` | Only when the repository renders docs | Runs `DOCS_CMD`. The default writes one HTML file for each Markdown file under `docs/`, an `index.html`, and `build/summaries/docs.md` |
 | `login` | Only when an image is published | Reads `REGISTRY_USER` and `REGISTRY_TOKEN` and runs `podman login` on `REGISTRY` |
 
-`build`, `test`, and `docs` are stubs. If the command variable is empty, the target fails and names the variable.
+`build` and `test` are stubs. If the command variable is empty, the target fails and names the variable.
 
 `help` lists `setup`, `build`, `test`, `test-changed`, and `project-report`. It lists `docs` and `login` only when those targets exist.
 
@@ -68,7 +67,8 @@ Make reads `RENDER_DOCS` and `PUBLISH_IMAGE` while it parses `project.mk`. Set t
 | `TEST_CHANGED_CMD` | Runs the tests that cover the diff. The selection is coverage, not a hand-kept list. Empty fails `test-changed` |
 | `PROJECT_REPORT_CMD` | Writes `build/project-report.md`. `report.mk` in `r-project-report` sets it when that skill is installed and the project did not set it. Empty fails `r-project-report` |
 | `RENDER_DOCS` | `1` when this repository renders docs. Otherwise there is no `docs` target |
-| `DOCS_CMD` | The renderer. Empty fails `docs` |
+| `DOCS_CMD` | The renderer. Empty means `scripts/render_docs.py` of `r-project-setup`, run with `$(PYTHON)`. Options go in `DOCS_OPTIONS`, such as `--lang de` |
+| `DOCS_SOURCE`, `DOCS_OUT` | The input and output directory of the shared renderer. Defaults `docs` and `build/docs` |
 | `PUBLISH_IMAGE` | `1` when an image is published. Otherwise there is no `login` target |
 | `REGISTRY` | The registry host of `login`. Default `ghcr.io` |
 | `DEFAULT_BRANCH` | The default branch. Make finds it: the origin default branch, else `main`, else `master` |
@@ -85,7 +85,7 @@ The language skill names the tool of `FORMAT_CMD`, `LINT_CMD`, `COVERAGE_CMD`, a
 | File | Provides |
 | --- | --- |
 | `project.mk` | `help`, and the includes of every file below |
-| `help.mk` | `HELP_GROUPS` and `HELP_LIST`, the awk command that `help` runs. `project.mk` and `sdlc.mk` include it |
+| `help.mk` | `HELP_GROUPS` and `HELP_LIST`, the awk command that `help` runs. `project.mk` includes it, and `sdlc.mk` includes `project.mk` |
 | `contract.mk` | `setup`, `build`, `test`, the quality targets, `project-report`, and `docs` and `login` when the variables say so |
 | `doctor.mk` | `doctor` |
 | `skills.mk` | `skills-install`, `skills-update`, `apm` |
