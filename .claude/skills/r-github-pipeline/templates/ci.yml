@@ -4,7 +4,9 @@
 # Blocks between "keep" and "end" comment lines are optional: keep a
 # block or delete it with both of its comment lines. With every optional
 # block deleted, this file is the plain image pipeline. Node keeps the
-# Node blocks. A Gradle project that publishes a GitHub release with the
+# Node blocks. A Gradle project keeps the Gradle blocks: setup restores
+# and saves the Gradle cache, and build and test only restore it.
+# A Gradle project that publishes a GitHub release with the
 # JAR keeps the Release blocks, and the JAR blocks if the image is built
 # from the tested JAR. With the JAR blocks deleted, build hands the image
 # tar to publish-container.
@@ -27,7 +29,8 @@
 # The Make contract is the r-project-setup skill: help is the default goal.
 # setup, build, test, and login are that skill's target names. This
 # workflow calls make; it does not define the contract. Every step is
-# checkout, an artifact upload or download, or make. The language runs
+# checkout, an artifact upload or download, a Gradle cache restore or
+# save, or make. The language runs
 # inside the targets, in Podman. Replace OWNER and NAME.
 # The name publish-github stays in the contains() lists of build and
 # test. Without the Release blocks no job has that name, so the name
@@ -67,6 +70,10 @@ env:
   # Node: keep for a Node project.
   NODE_VERSION: "24"
   # End of Node.
+  # Gradle: keep for a Gradle project. An empty repository variable
+  # MAVEN_MIRROR keeps Maven Central (r-jvm).
+  MAVEN_MIRROR: ${{ vars.MAVEN_MIRROR }}
+  # End of Gradle.
 
 jobs:
   setup:
@@ -90,8 +97,30 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CI_BEFORE: ${{ github.event.before }}
         run: make ci-scope
+      # Gradle: keep for a Gradle project. setup fills the Gradle cache.
+      - name: Restore the Gradle cache
+        if: steps.scope.outputs.board-only != 'true'
+        id: gradle-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle', '**/*.gradle.kts', '**/gradle.properties', 'gradle/wrapper/gradle-wrapper.properties', 'gradle/libs.versions.toml') }}
+          restore-keys: gradle-${{ runner.os }}-
+      # End of Gradle.
       - if: steps.scope.outputs.board-only != 'true'
         run: make setup
+      # Gradle: keep for a Gradle project. Only setup saves the cache.
+      - name: Save the Gradle cache
+        if: steps.scope.outputs.board-only != 'true' && steps.gradle-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ steps.gradle-cache.outputs.cache-primary-key }}
+      # End of Gradle.
       # Node: keep for a Node project. make setup packs the dependencies.
       - uses: actions/upload-artifact@v7
         if: steps.scope.outputs.board-only != 'true'
@@ -123,6 +152,16 @@ jobs:
           name: deps
           path: build/deps
       # End of Node.
+      # Gradle: keep for a Gradle project.
+      - name: Restore the Gradle cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle', '**/*.gradle.kts', '**/gradle.properties', 'gradle/wrapper/gradle-wrapper.properties', 'gradle/libs.versions.toml') }}
+          restore-keys: gradle-${{ runner.os }}-
+      # End of Gradle.
       - run: make build
       # Image: keep when publish-container pushes the image tar of make build.
       # Delete it when the JAR blocks stay.
@@ -167,6 +206,16 @@ jobs:
           name: deps
           path: build/deps
       # End of Node.
+      # Gradle: keep for a Gradle project.
+      - name: Restore the Gradle cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle', '**/*.gradle.kts', '**/gradle.properties', 'gradle/wrapper/gradle-wrapper.properties', 'gradle/libs.versions.toml') }}
+          restore-keys: gradle-${{ runner.os }}-
+      # End of Gradle.
       - run: make editorconfig
       - run: make format
       - run: make lint
