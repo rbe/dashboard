@@ -32,6 +32,9 @@ changed_tests = load("changed_tests", HERE / "changed_tests.py")
 node_cover_map = load("node_cover_map", HERE / "node_cover_map.py")
 jacoco_cover_map = load("jacoco_cover_map", HERE / "jacoco_cover_map.py")
 go_cover_map = load("go_cover_map", HERE / "go_cover_map.py")
+pytest_cover = load("pytest_cover", HERE / "pytest_cover.py")
+jacoco_repo_paths = load("jacoco_repo_paths", HERE / "jacoco_repo_paths.py")
+jacoco_summary = load("jacoco_summary", HERE / "jacoco_summary.py")
 skill_index = load("skill_index", ROOT / "skills/r-record/scripts/skill_index.py")
 
 
@@ -1876,6 +1879,36 @@ class MakeAndPodmanInterfaceTest(unittest.TestCase):
         text = script.read_text(encoding="utf-8")
         self.assertIn("System.getenv('MAVEN_MIRROR')", text)
         self.assertIn("'https://repo.maven.apache.org/maven2'", text)
+        self.assertIn("settingsEvaluated", text)
+        self.assertIn("plugins.isEmpty()", text)
+        self.assertLess(
+            text.index("plugins.maven { url = mirror"),
+            text.index("plugins.gradlePluginPortal()"),
+        )
+
+    def test_a_gradle_workflow_restores_the_cache_and_passes_the_mirror(self):
+        """id: R-154"""
+        text = (self.PIPELINE / "templates" / "ci.yml").read_text(encoding="utf-8")
+        self.assertIn("  MAVEN_MIRROR: ${{ vars.MAVEN_MIRROR }}\n", text)
+        first_gradle_step = {
+            "setup": "run: make setup",
+            "build": "run: make build",
+            "test": "run: make editorconfig",
+        }
+        for name, step in first_gradle_step.items():
+            job = rf"(?ms)^  {name}:\n.*?(?=^  [a-z-]+:\n|\Z)"
+            body = re.search(job, text).group(0)
+            self.assertIn("~/.gradle/caches", body, name)
+            self.assertLess(
+                body.index("uses: actions/cache/restore@"), body.index(step), name
+            )
+            if name == "setup":
+                self.assertLess(
+                    body.index(step), body.index("uses: actions/cache/save@")
+                )
+            else:
+                self.assertNotIn("actions/cache/save@", body, name)
+        self.assertEqual(text.count("actions/cache/save@"), 1)
 
     def test_a_client_package_has_one_generic_publish_workflow(self):
         """id: R-117"""
@@ -3096,6 +3129,114 @@ class LanguageIncludeFileTest(unittest.TestCase):
             self.assertIn(f"`{name}`", text, skill)
             tooling = self.read(f"{skill}/references/tooling.md")
             self.assertIn(f"include .claude/skills/{language}", tooling, skill)
+
+
+class PytestCoverTest(unittest.TestCase):
+    def test_a_test_id_becomes_the_pytest_node_of_its_file(self):
+        """id: R-155"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "tests/test_mail.py", "def test_x():\n    pass\n")
+            self.assertEqual(
+                pytest_cover.node_id(root, "tests.test_mail.TestMail.test_x"),
+                "tests/test_mail.py::TestMail::test_x",
+            )
+            self.assertEqual(
+                pytest_cover.node_id(root, "tests.test_mail.test_x"),
+                "tests/test_mail.py::test_x",
+            )
+            self.assertIsNone(pytest_cover.node_id(root, "tests.test_gone.test_x"))
+
+    def test_changed_selects_the_nodes_that_cover_the_diff(self):
+        """id: R-155"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "tests/test_mail.py", "def test_x():\n    pass\n")
+            write(root, "tests/test_page.py", "def test_y():\n    pass\n")
+            write(
+                root,
+                "build/coverage/covered.json",
+                json.dumps(
+                    {
+                        "tests.test_mail.test_x": ["src/mail.py"],
+                        "tests.test_page.test_y": ["src/page.py"],
+                    }
+                ),
+            )
+            write(root, "build/coverage/changed.txt", "src/mail.py\n")
+            self.assertEqual(
+                pytest_cover.chosen_nodes(root), ["tests/test_mail.py::test_x"]
+            )
+
+    def test_changed_without_a_coverage_map_says_so(self):
+        """id: R-155"""
+        with tempfile.TemporaryDirectory() as tmp:
+            err = io.StringIO()
+            with redirect_stderr(err):
+                self.assertIsNone(pytest_cover.chosen_nodes(Path(tmp)))
+            self.assertIn("Run make coverage", err.getvalue())
+
+
+class JacocoReportTest(unittest.TestCase):
+    REPORT = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<report name="x">'
+        '<package name="org/x"><sourcefile name="A.java"/><sourcefile name="B.groovy"/></package>'
+        '<counter type="LINE" missed="1" covered="3"/>'
+        '<counter type="BRANCH" missed="0" covered="0"/>'
+        '<counter type="CLASS" missed="0" covered="2"/>'
+        "</report>"
+    )
+
+    def test_each_source_file_gets_the_path_from_the_repository_root(self):
+        """id: R-156"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "core/src/main/java/org/x/A.java", "class A {}\n")
+            write(root, "web/src/main/groovy/org/x/B.groovy", "class B {}\n")
+            write(root, "web/src/test/groovy/org/x/B.groovy", "class B {}\n")
+            report = write(root, "build/jacoco.xml", self.REPORT)
+            output = root / "build/repo.xml"
+            cwd = os.getcwd()
+            try:
+                os.chdir(root)
+                self.assertEqual(
+                    jacoco_repo_paths.main(["x", str(report), str(output)]), 0
+                )
+            finally:
+                os.chdir(cwd)
+            packages = {
+                package.get("name"): [
+                    s.get("name") for s in package.findall("sourcefile")
+                ]
+                for package in ElementTree.parse(output).getroot().findall("package")
+            }
+            self.assertEqual(
+                packages,
+                {
+                    "../../../core/src/main/java/org/x": ["A.java"],
+                    "../../../web/src/main/groovy/org/x": ["B.groovy"],
+                },
+            )
+
+    def test_the_summary_lists_the_counters_of_the_report(self):
+        """id: R-157"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "build/reports/jacoco/test/jacocoTestReport.xml", self.REPORT)
+            jacoco_summary.write_summary(root)
+            text = (root / "build/summaries/coverage.md").read_text(encoding="utf-8")
+            self.assertIn("- Line: 75.0% (3 covered, 1 missed)", text)
+            self.assertIn("- Branch: n/a (0 covered, 0 missed)", text)
+            self.assertNotIn("Class", text)
+
+    def test_no_report_removes_the_summary(self):
+        """id: R-157"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "build/summaries/coverage.md", "old\n")
+            jacoco_summary.write_summary(root)
+            self.assertFalse((root / "build/summaries/coverage.md").exists())
 
 
 if __name__ == "__main__":
