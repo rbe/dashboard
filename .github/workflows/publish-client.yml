@@ -1,8 +1,15 @@
-# Publish the TypeScript client. This is not the app pipeline.
-# It packs @rbe/dashboard-client, creates a GitHub Release, and publishes
-# the package to GitHub Packages. It does not build or push the container image.
-# workflow_dispatch and a tag client-v* both publish. The tag must match
-# client/package.json. A mismatch fails and does not invent a version.
+# Publishes the TypeScript client in client/. This is not the app pipeline.
+# The app pipeline stays in ci.yml and publishes only the container image.
+# This workflow packs the client, creates a GitHub Release, and publishes
+# the package to GitHub Packages. It does not build or push the image.
+# It does not invent a version. The version is the version of
+# client/package.json. A tag client-vX.Y.Z starts it and must match that
+# version, or the run fails. workflow_dispatch publishes the version of
+# client/package.json. A second run of the same version creates no second
+# release and no second package version.
+# Copy this file to .github/workflows/publish-client.yml when the project
+# has client/package.json. The package name and the scope come from that
+# file, and the scope must be the owner of the repository.
 
 name: Publish client
 
@@ -10,39 +17,82 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - 'client-v*'
+      - "client-v*"
 
 permissions:
-  contents: read
+  contents: write
+  packages: write
+
+concurrency:
+  group: publish-client-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   publish:
     runs-on: ubuntu-26.04
-    permissions:
-      contents: write
-      packages: write
     steps:
       - uses: actions/checkout@v7
+
       - uses: actions/setup-node@v7
         with:
           node-version: "24"
           registry-url: https://npm.pkg.github.com
-          scope: "@rbe"
-      - name: Install, test, pack, release, and publish
+          scope: "@${{ github.repository_owner }}"
+          package-manager-cache: false
+
+      - name: Resolve the client version
+        id: client
         working-directory: client
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          name=$(node -p "require('./package.json').name")
           version=$(node -p "require('./package.json').version")
-          tag="client-v${version}"
-          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "$tag" ]; then
-            echo "Tag ${GITHUB_REF_NAME} does not match client package version ${version}. Refusing to invent a version."
+          if ! printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Version '${version}' of client/package.json is not MAJOR.MINOR.PATCH. Refusing to invent a version."
             exit 1
           fi
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "client-v${version}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match client version ${version}. Refusing to invent a version."
+            exit 1
+          fi
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Install, test, and pack
+        working-directory: client
+        run: |
+          set -euo pipefail
           npm ci
           npm test
           npm pack
-          gh release create "$tag" --title "@rbe/dashboard-client ${version}" --notes "Typed HTTP client for the dashboard API." ./*.tgz
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLIENT_NAME: ${{ steps.client.outputs.name }}
+          CLIENT_VERSION: ${{ steps.client.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag="client-v${CLIENT_VERSION}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release ${tag} already exists"
+            exit 0
+          fi
+          gh release create "$tag" client/*.tgz \
+            --target "$GITHUB_SHA" \
+            --title "${CLIENT_NAME} ${CLIENT_VERSION}" \
+            --notes "Dependency: \"${CLIENT_NAME}\": \"${CLIENT_VERSION}\". Registry: @${GITHUB_REPOSITORY_OWNER}:registry=https://npm.pkg.github.com"
+
+      - name: Publish to GitHub Packages
+        working-directory: client
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLIENT_NAME: ${{ steps.client.outputs.name }}
+          CLIENT_VERSION: ${{ steps.client.outputs.version }}
+        run: |
+          set -euo pipefail
+          if npm view "${CLIENT_NAME}@${CLIENT_VERSION}" version >/dev/null 2>&1; then
+            echo "GitHub Packages already has ${CLIENT_NAME}@${CLIENT_VERSION}"
+            exit 0
+          fi
           npm publish
